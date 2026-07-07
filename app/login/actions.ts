@@ -11,18 +11,25 @@ export async function loginAction(formData: FormData) {
     redirect('/login?error=Informe o e-mail e a senha.');
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (error) {
-    redirect('/login?error=E-mail ou senha inválidos.');
+    if (error) {
+      redirect('/login?error=E-mail ou senha inválidos.');
+    }
+  } catch {
+    redirect('/login?error=Não foi possível conectar ao Supabase.');
   }
 
   redirect('/painel');
 }
 
 export async function logoutAction() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  try {
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+  } catch {}
+
   redirect('/login');
 }

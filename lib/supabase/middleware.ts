@@ -1,13 +1,35 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getSupabaseEnv, isSupabaseConfigured } from './config';
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const isLoginRoute = pathname.startsWith('/login');
+  const isPublicAsset =
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/favicon') ||
+    pathname.includes('.');
+
+  if (isPublicAsset) {
+    return NextResponse.next({ request });
+  }
+
+  if (!isSupabaseConfigured()) {
+    if (isLoginRoute) {
+      return NextResponse.next({ request });
+    }
+
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('error', 'Configuração do Supabase incompleta.');
+    return NextResponse.redirect(url);
+  }
+
+  const { url, anonKey } = getSupabaseEnv();
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  try {
+    const supabase = createServerClient(url!, anonKey!, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -20,36 +42,32 @@ export async function updateSession(request: NextRequest) {
           );
         },
       },
-    },
-  );
+    });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-  const isLoginRoute = pathname.startsWith('/login');
-  const isPublicAsset =
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon') ||
-    pathname.includes('.');
+    if (!user && !isLoginRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('next', pathname);
+      return NextResponse.redirect(url);
+    }
 
-  if (isPublicAsset) {
-    return supabaseResponse;
-  }
-
-  if (!user && !isLoginRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.searchParams.set('next', pathname);
-    return NextResponse.redirect(url);
-  }
-
-  if (user && isLoginRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/painel';
-    url.search = '';
-    return NextResponse.redirect(url);
+    if (user && isLoginRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/painel';
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+  } catch {
+    if (!isLoginRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'Falha ao conectar com o Supabase.');
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
