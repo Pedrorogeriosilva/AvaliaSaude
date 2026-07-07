@@ -1,6 +1,6 @@
-# Avalia Saúde - Porto Alegre do Norte
+# Avalia SaÃºde - Porto Alegre do Norte
 
-Base inicial do sistema **Avalia Saúde - Porto Alegre do Norte**, preparada para Next.js, Supabase e deploy na Vercel.
+Base inicial do sistema **Avalia SaÃºde - Porto Alegre do Norte**, preparada para Next.js, Supabase e deploy na Vercel.
 
 ## O que jÃ¡ estÃ¡ incluÃ­do
 
@@ -15,6 +15,7 @@ Base inicial do sistema **Avalia Saúde - Porto Alegre do Norte**, preparada par
 - Listagem de usuÃ¡rios/perfis.
 - Tela de nova avaliaÃ§Ã£o com seleÃ§Ã£o dinÃ¢mica de profissionais pela unidade.
 - ConexÃ£o com as views criadas no schema SQL.
+- Script opcional para criar o usuÃ¡rio administrador inicial.
 
 ## Stack
 
@@ -25,6 +26,17 @@ Base inicial do sistema **Avalia Saúde - Porto Alegre do Norte**, preparada par
 - Supabase/PostgreSQL
 - Recharts
 - Vercel
+
+## Credencial administrativa inicial
+
+Defina a credencial administrativa inicial no seu ambiente:
+
+```text
+E-mail: admin@seudominio.com
+Senha: defina uma senha forte localmente
+```
+
+A senha nÃ£o fica salva em tabela pÃºblica do projeto. Ela deve ser cadastrada no **Supabase Auth**.
 
 ## Como rodar localmente
 
@@ -42,7 +54,7 @@ Crie um projeto no Supabase e execute o arquivo:
 database/schema.sql
 ```
 
-Use o SQL Editor do Supabase.
+Use o **SQL Editor** do Supabase.
 
 ### 3. Configurar variÃ¡veis de ambiente
 
@@ -61,7 +73,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLICA
 
 Esses valores ficam no painel do Supabase em **Project Settings > API**.
 
-### 4. Criar o primeiro usuÃ¡rio
+### 4. Criar o primeiro usuÃ¡rio administrador
+
+VocÃª tem duas opÃ§Ãµes.
+
+#### OpÃ§Ã£o A â€” pelo painel do Supabase
 
 No Supabase, vÃ¡ em:
 
@@ -69,17 +85,44 @@ No Supabase, vÃ¡ em:
 Authentication > Users > Add user
 ```
 
-Crie o e-mail e a senha do primeiro administrador.
+Crie o usuário:
 
-Depois, no SQL Editor, execute:
-
-```sql
-update public.profiles
-set role = 'admin', status = 'active', full_name = 'Administrador'
-where email = 'email-do-admin@dominio.com';
+```text
+E-mail: admin@seudominio.com
+Senha: defina uma senha forte localmente
 ```
 
-Troque o e-mail pelo e-mail real criado.
+Depois vÃ¡ em **SQL Editor** e execute:
+
+```text
+database/configurar_admin.sql
+```
+
+Isso garante que o perfil do usuÃ¡rio fique como:
+
+```text
+role: admin
+status: active
+```
+
+#### OpÃ§Ã£o B â€” via script local
+
+No `.env.local`, alÃ©m das variÃ¡veis pÃºblicas do Supabase, configure tambÃ©m:
+
+```env
+SUPABASE_SERVICE_ROLE_KEY=SUA_SERVICE_ROLE_KEY
+ADMIN_EMAIL=admin@seudominio.com
+ADMIN_PASSWORD=DEFINA_UMA_SENHA_FORTE_AQUI
+ADMIN_NAME=Administrador Avalia Saúde
+```
+
+Depois rode:
+
+```bash
+npm run setup:admin
+```
+
+A `SUPABASE_SERVICE_ROLE_KEY` deve ser usada apenas localmente para criar/atualizar o administrador. NÃ£o publique `.env.local` no GitHub.
 
 ### 5. Rodar o projeto
 
@@ -102,6 +145,8 @@ http://localhost:3000
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 4. FaÃ§a o deploy.
 
+NÃ£o Ã© necessÃ¡rio configurar `SUPABASE_SERVICE_ROLE_KEY` na Vercel para esta versÃ£o.
+
 ## ObservaÃ§Ãµes importantes
 
 - A senha dos usuÃ¡rios fica no Supabase Auth, nÃ£o na tabela `profiles`.
@@ -109,6 +154,7 @@ http://localhost:3000
 - UsuÃ¡rios com perfil `viewer` visualizam dados, mas nÃ£o devem alterar cadastros.
 - UsuÃ¡rios `operator` podem cadastrar pacientes e avaliaÃ§Ãµes.
 - UsuÃ¡rios `admin` tÃªm acesso completo.
+- O arquivo `.env.local` nÃ£o deve ser enviado ao GitHub.
 
 ## PrÃ³ximo passo recomendado
 

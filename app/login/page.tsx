@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: Props) {
             </div>
             <h2 className="text-2xl font-bold text-slate-900">Entrar no sistema</h2>
             <p className="mt-2 text-sm text-slate-500">
-              Informe seu e-mail e senha cadastrados no Supabase Auth.
+              Informe o e-mail e senha cadastrados no Supabase Auth.
             </p>
           </div>
 
@@ -51,7 +51,7 @@ export default async function LoginPage({ searchParams }: Props) {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600"
                 type="email"
                 name="email"
-                placeholder="admin@dominio.com"
+                placeholder="avsaudepa@flow.com"
                 required
               />
             </label>
