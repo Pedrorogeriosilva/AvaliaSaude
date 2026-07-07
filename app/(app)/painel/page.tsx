@@ -1,5 +1,5 @@
-import { MonthlyChart } from '@/components/dashboard/monthly-chart';
-import { UnitBarChart } from '@/components/dashboard/unit-bar-chart';
+import { LazyMonthlyChart } from '@/components/dashboard/lazy-monthly-chart';
+import { LazyUnitBarChart } from '@/components/dashboard/lazy-unit-bar-chart';
 import { PageHeader } from '@/components/ui/page-header';
 import { SectionCard } from '@/components/ui/section-card';
 import { StatCard } from '@/components/ui/stat-card';
@@ -17,9 +17,21 @@ export default async function PainelPage() {
   const supabase = await createClient();
 
   const [{ data: unitMetrics }, { data: cityMonthly }, { data: professionalMetrics }] = await Promise.all([
-    supabase.from('v_unit_metrics').select('*').order('avg_general_score', { ascending: false, nullsFirst: false }),
-    supabase.from('v_city_monthly_metrics').select('*').order('month', { ascending: true }),
-    supabase.from('v_professional_metrics').select('*').order('avg_professional_score', { ascending: false, nullsFirst: false }).limit(5),
+    supabase
+      .from('v_unit_metrics')
+      .select(
+        'health_unit_id, health_unit_name, health_unit_type, total_evaluations, avg_general_score, avg_satisfaction_score, resolution_rate, avg_wait_time_minutes',
+      )
+      .order('avg_general_score', { ascending: false, nullsFirst: false }),
+    supabase
+      .from('v_city_monthly_metrics')
+      .select('month, avg_general_score')
+      .order('month', { ascending: true }),
+    supabase
+      .from('v_professional_metrics')
+      .select('professional_id, professional_name, position, health_unit_name, total_evaluations, avg_professional_score')
+      .order('avg_professional_score', { ascending: false, nullsFirst: false })
+      .limit(5),
   ]);
 
   const units = (unitMetrics || []) as UnitMetric[];
@@ -48,11 +60,11 @@ export default async function PainelPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <SectionCard title="Evolução mensal da nota geral" description="Média geral da cidade por mês.">
-          <MonthlyChart data={monthly} />
+          <LazyMonthlyChart data={monthly} />
         </SectionCard>
 
         <SectionCard title="Notas por unidade" description="Até 10 unidades com maior média geral.">
-          <UnitBarChart data={units} />
+          <LazyUnitBarChart data={units} />
         </SectionCard>
       </div>
 
@@ -82,7 +94,11 @@ export default async function PainelPage() {
                   </tr>
                 ))}
                 {!units.length ? (
-                  <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">Nenhuma unidade cadastrada.</td></tr>
+                  <tr>
+                    <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                      Nenhuma unidade cadastrada.
+                    </td>
+                  </tr>
                 ) : null}
               </tbody>
             </table>
@@ -92,16 +108,25 @@ export default async function PainelPage() {
         <SectionCard title="Profissionais em destaque" description="Maiores médias individuais registradas.">
           <div className="space-y-3">
             {highlightedProfessionals.map((professional, index) => (
-              <div key={professional.professional_id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+              <div
+                key={professional.professional_id}
+                className="flex items-center justify-between rounded-lg border border-slate-200 p-3"
+              >
                 <div>
-                  <div className="text-sm font-bold text-slate-900">{index + 1}. {professional.professional_name}</div>
-                  <div className="text-xs text-slate-500">{professional.position} · {professional.health_unit_name}</div>
+                  <div className="text-sm font-bold text-slate-900">
+                    {index + 1}. {professional.professional_name}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {professional.position} · {professional.health_unit_name}
+                  </div>
                 </div>
                 <div className="text-lg font-bold text-blue-700">{formatNumber(professional.avg_professional_score)}</div>
               </div>
             ))}
             {!highlightedProfessionals.length ? (
-              <div className="rounded-lg bg-slate-50 p-8 text-center text-sm text-slate-500">Nenhum profissional avaliado ainda.</div>
+              <div className="rounded-lg bg-slate-50 p-8 text-center text-sm text-slate-500">
+                Nenhum profissional avaliado ainda.
+              </div>
             ) : null}
           </div>
         </SectionCard>
