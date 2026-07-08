@@ -14,7 +14,6 @@ export async function loginAction(formData: FormData) {
   try {
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-
     if (error) {
       redirect('/login?error=E-mail ou senha inválidos.');
     }
@@ -29,7 +28,8 @@ export async function logoutAction() {
   try {
     const supabase = await createClient();
     await supabase.auth.signOut();
-  } catch {}
+  } catch {
+  }
 
   redirect('/login');
 }

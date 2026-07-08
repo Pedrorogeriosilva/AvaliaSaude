@@ -1,23 +1,29 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 
-export async function getCurrentProfile() {
+type CurrentProfile = {
+  full_name?: string | null;
+  email?: string | null;
+  role?: string | null;
+} | null;
+
+export const getCurrentProfile = cache(async (): Promise<CurrentProfile> => {
   try {
     const supabase = await createClient();
-
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) return null;
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
+    const role = (user.app_metadata?.role as string | undefined) || (user.user_metadata?.role as string | undefined) || null;
 
-    return profile;
+    return {
+      full_name: (user.user_metadata?.full_name as string | undefined) || user.email?.split('@')[0] || 'Usuário',
+      email: user.email,
+      role,
+    };
   } catch {
     return null;
   }
-}
+});

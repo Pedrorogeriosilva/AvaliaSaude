@@ -17,65 +17,56 @@ function numberValue(value: FormDataEntryValue | null) {
 }
 
 export async function createEvaluationAction(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const professionalIds = formData.getAll('professional_ids').map(String).filter(Boolean);
+    const professionalIds = formData.getAll('professional_ids').map(String).filter(Boolean);
+    const payload = {
+      patient_id: String(formData.get('patient_id') || ''),
+      health_unit_id: String(formData.get('health_unit_id') || ''),
+      attendance_date: String(formData.get('attendance_date') || ''),
+      contact_type: String(formData.get('contact_type') || 'in_person'),
+      wait_time_minutes: numberValue(formData.get('wait_time_minutes')),
+      resolution: String(formData.get('resolution') || 'partial'),
+      general_score: numberValue(formData.get('general_score')),
+      satisfaction_score: numberValue(formData.get('satisfaction_score')),
+      structure_score: numberValue(formData.get('structure_score')),
+      clarity_score: numberValue(formData.get('clarity_score')),
+      service_quality_score: numberValue(formData.get('service_quality_score')),
+      manifestation: String(formData.get('manifestation') || 'neutral'),
+      general_notes: String(formData.get('general_notes') || '').trim() || null,
+      created_by: user?.id || null,
+    };
 
-  const payload = {
-    patient_id: String(formData.get('patient_id') || ''),
-    health_unit_id: String(formData.get('health_unit_id') || ''),
-    attendance_date: String(formData.get('attendance_date') || ''),
-    contact_type: String(formData.get('contact_type') || 'in_person'),
-    wait_time_minutes: numberValue(formData.get('wait_time_minutes')),
-    resolution: String(formData.get('resolution') || 'partial'),
-    general_score: numberValue(formData.get('general_score')),
-    satisfaction_score: numberValue(formData.get('satisfaction_score')),
-    structure_score: numberValue(formData.get('structure_score')),
-    clarity_score: numberValue(formData.get('clarity_score')),
-    service_quality_score: numberValue(formData.get('service_quality_score')),
-    manifestation: String(formData.get('manifestation') || 'neutral'),
-    general_notes: String(formData.get('general_notes') || '').trim() || null,
-    created_by: user?.id || null,
-  };
-
-  if (!payload.patient_id || !payload.health_unit_id || !payload.attendance_date) {
-    redirect('/avalie?error=Preencha paciente, unidade e data do atendimento.');
-  }
-
-  const { data: evaluation, error } = await supabase
-    .from('evaluations')
-    .insert(payload)
-    .select('id')
-    .single();
-
-  if (error || !evaluation) {
-    redirect(`/avalie?error=${encodeURIComponent(error?.message || 'Não foi possível salvar a avaliação.')}`);
-  }
-
-  const professionalRows = professionalIds
-    .map((professionalId): EvaluationProfessionalInsert | null => {
-      const score = numberValue(formData.get(`score_${professionalId}`));
-      if (score === null) return null;
-      return {
-        evaluation_id: evaluation.id,
-        professional_id: professionalId,
-        score,
-      };
-    })
-    .filter((row): row is EvaluationProfessionalInsert => row !== null);
-
-  if (professionalRows.length) {
-    const { error: professionalsError } = await supabase
-      .from('evaluation_professionals')
-      .insert(professionalRows);
-
-    if (professionalsError) {
-      redirect(`/avalie?error=${encodeURIComponent(professionalsError.message)}`);
+    if (!payload.patient_id || !payload.health_unit_id || !payload.attendance_date) {
+      redirect('/avalie?error=Preencha paciente, unidade e data do atendimento.');
     }
-  }
 
-  redirect('/avalie?success=1');
+    const { data: evaluation, error } = await supabase.from('evaluations').insert(payload).select('id').single();
+    if (error || !evaluation) {
+      redirect(`/avalie?error=${encodeURIComponent(error?.message || 'Não foi possível salvar a avaliação.')}`);
+    }
+
+    const professionalRows = professionalIds
+      .map((professionalId): EvaluationProfessionalInsert | null => {
+        const score = numberValue(formData.get(`score_${professionalId}`));
+        if (score === null) return null;
+        return { evaluation_id: evaluation.id, professional_id: professionalId, score };
+      })
+      .filter((row): row is EvaluationProfessionalInsert => row !== null);
+
+    if (professionalRows.length) {
+      const { error: professionalsError } = await supabase.from('evaluation_professionals').insert(professionalRows);
+      if (professionalsError) {
+        redirect(`/avalie?error=${encodeURIComponent(professionalsError.message)}`);
+      }
+    }
+
+    redirect('/avalie?success=1');
+  } catch {
+    redirect('/avalie?error=Não foi possível salvar a avaliação no momento.');
+  }
 }
