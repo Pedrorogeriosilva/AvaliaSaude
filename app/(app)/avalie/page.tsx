@@ -2,9 +2,12 @@ import { EvaluationForm } from '@/components/forms/evaluation-form';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SectionCard } from '@/components/ui/section-card';
-import { createClient } from '@/lib/supabase/server';
-import type { HealthUnit, Patient, Professional } from '@/types';
+import { getEvaluationFormData } from '@/lib/app-data';
+import { getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createEvaluationAction } from './actions';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 type Props = {
   searchParams?: Promise<{ success?: string; error?: string }>;
@@ -14,33 +17,28 @@ export default async function AvaliePage({ searchParams }: Props) {
   const params = searchParams ? await searchParams : {};
 
   try {
-    const supabase = await createClient();
-    const [{ data: patients }, { data: units }, { data: professionals }] = await Promise.all([
-      supabase.from('patients').select('id, full_name').eq('status', 'active').order('full_name'),
-      supabase.from('health_units').select('id, name').eq('status', 'active').order('name'),
-      supabase.from('professionals').select('id, full_name, position, health_unit_id, work_schedule').eq('status', 'active').order('full_name'),
-    ]);
+    const { patients, units, professionals, error } = await getEvaluationFormData();
 
-    const patientRows = (patients || []) as Patient[];
-    const unitRows = (units || []) as HealthUnit[];
-    const professionalRows = (professionals || []) as Professional[];
+    if (error) {
+      return <EmptyState title="Avaliação indisponível" description={getFriendlySupabaseError(error, 'Não foi possível carregar os dados necessários para registrar uma avaliação.')} />;
+    }
 
     return (
       <>
-        <PageHeader title="Avalie" description="Registre uma avaliação de atendimento realizada pela equipe responsável pelas métricas do município." />
+        <PageHeader title="Avalie" description="Registre a avaliação do atendimento e cadastre o paciente no mesmo fluxo, quando necessário." />
         {params.success ? <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">Avaliação salva com sucesso.</div> : null}
         {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{params.error}</div> : null}
 
-        {!patientRows.length || !unitRows.length ? (
-          <EmptyState title="Cadastros incompletos" description="Cadastre pacientes e unidades ativas antes de registrar uma avaliação." />
+        {!units.length ? (
+          <EmptyState title="Cadastros incompletos" description="Cadastre ao menos uma unidade ativa antes de registrar uma avaliação." />
         ) : (
-          <SectionCard title="Nova avaliação" description="Preencha os dados do atendimento, selecione os profissionais envolvidos e salve a pesquisa.">
-            <EvaluationForm patients={patientRows} units={unitRows} professionals={professionalRows} action={createEvaluationAction} />
+          <SectionCard title="Nova avaliação" description="Os dados do novo paciente ficam salvos automaticamente no cadastro/histórico de pacientes.">
+            <EvaluationForm patients={patients} units={units} professionals={professionals} action={createEvaluationAction} />
           </SectionCard>
         )}
       </>
     );
   } catch {
-    return <EmptyState title="Avaliação indisponível" description="Não foi possível carregar os dados necessários para registrar uma avaliação." />;
+    return <EmptyState title="Avaliação indisponível" description="Não foi possível carregar os dados necessários para registrar uma avaliação. Confira a configuração do Supabase." />;
   }
 }

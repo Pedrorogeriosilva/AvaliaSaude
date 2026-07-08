@@ -39,17 +39,17 @@ const adminPassword = process.env.ADMIN_PASSWORD;
 const adminName = process.env.ADMIN_NAME || 'Administrador Avalia Saúde';
 
 if (!supabaseUrl) {
-  console.error('Erro: NEXT_PUBLIC_SUPABASE_URL nÃ£o foi encontrada. Configure o arquivo .env.local.');
+  console.error('Erro: NEXT_PUBLIC_SUPABASE_URL não foi encontrada. Configure o arquivo .env.local.');
   process.exit(1);
 }
 
 if (!serviceRoleKey) {
-  console.error('Erro: SUPABASE_SERVICE_ROLE_KEY nÃ£o foi encontrada. Ela Ã© necessÃ¡ria apenas para criar o usuÃ¡rio admin via script local.');
+  console.error('Erro: SUPABASE_SERVICE_ROLE_KEY não foi encontrada. Ela é necessária apenas para criar o usuário admin via script local.');
   process.exit(1);
 }
 
 if (!adminPassword) {
-  console.error('Erro: ADMIN_PASSWORD nÃ£o foi encontrada. Defina no .env.local ou rode o comando informando essa variÃ¡vel.');
+  console.error('Erro: ADMIN_PASSWORD não foi encontrada. Defina no .env.local ou rode o comando informando essa variável.');
   process.exit(1);
 }
 
@@ -98,7 +98,7 @@ async function main() {
 
     if (error) throw error;
     userId = data.user.id;
-    console.log(`UsuÃ¡rio atualizado: ${adminEmail}`);
+    console.log(`Usuário atualizado: ${adminEmail}`);
   } else {
     const { data, error } = await supabase.auth.admin.createUser({
       email: adminEmail,
@@ -111,7 +111,7 @@ async function main() {
 
     if (error) throw error;
     userId = data.user.id;
-    console.log(`UsuÃ¡rio criado: ${adminEmail}`);
+    console.log(`Usuário criado: ${adminEmail}`);
   }
 
   const { error: profileError } = await supabase.from('profiles').upsert(
@@ -129,11 +129,11 @@ async function main() {
   if (profileError) throw profileError;
 
   console.log('Perfil configurado como admin e active.');
-  console.log('Pronto. VocÃª jÃ¡ pode acessar o sistema com o e-mail administrativo configurado.');
+  console.log('Pronto. Você já pode acessar o sistema com o e-mail administrativo configurado.');
 }
 
 main().catch((error) => {
-  console.error('Falha ao configurar usuÃ¡rio administrador:');
+  console.error('Falha ao configurar usuário administrador:');
   console.error(error.message || error);
   process.exit(1);
 });

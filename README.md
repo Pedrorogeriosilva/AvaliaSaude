@@ -1,21 +1,22 @@
-# Avalia SaÃºde - Porto Alegre do Norte
+# Avalia Saúde - Porto Alegre do Norte
 
-Base inicial do sistema **Avalia SaÃºde - Porto Alegre do Norte**, preparada para Next.js, Supabase e deploy na Vercel.
+Sistema municipal de avaliação da saúde pública, preparado para Next.js, Supabase e deploy na Vercel.
 
-## O que jÃ¡ estÃ¡ incluÃ­do
+## Incluído nesta versão
 
 - Layout institucional com menu principal: Painel, Avalie, Ranking e Cadastros.
 - Login com Supabase Auth usando cookies/SSR.
-- ProteÃ§Ã£o de rotas via middleware.
-- Painel inicial com cards e grÃ¡ficos.
+- Proteção de rotas via middleware.
+- Validação de usuário ativo pela tabela `profiles`.
+- Painel com cards e gráficos carregados dinamicamente.
 - Ranking de unidades e profissionais.
 - Cadastro/listagem de pacientes.
-- Cadastro/listagem de unidades de saÃºde.
+- Cadastro/listagem de unidades de saúde.
 - Cadastro/listagem de profissionais.
-- Listagem de usuÃ¡rios/perfis.
-- Tela de nova avaliaÃ§Ã£o com seleÃ§Ã£o dinÃ¢mica de profissionais pela unidade.
-- ConexÃ£o com as views criadas no schema SQL.
-- Script opcional para criar o usuÃ¡rio administrador inicial.
+- Criação e manutenção de usuários/perfis pelo próprio site, quando a chave service role estiver configurada.
+- Tela de nova avaliação com seleção dinâmica de profissionais pela unidade.
+- SQL de schema, permissões e configuração do primeiro administrador.
+- Logo institucional nova em `public/brand`.
 
 ## Stack
 
@@ -27,38 +28,25 @@ Base inicial do sistema **Avalia SaÃºde - Porto Alegre do Norte**, preparada p
 - Recharts
 - Vercel
 
-## Credencial administrativa inicial
-
-Defina a credencial administrativa inicial no seu ambiente:
-
-```text
-E-mail: admin@seudominio.com
-Senha: defina uma senha forte localmente
-```
-
-A senha nÃ£o fica salva em tabela pÃºblica do projeto. Ela deve ser cadastrada no **Supabase Auth**.
-
 ## Como rodar localmente
 
-### 1. Instalar dependÃªncias
+### 1. Instalar dependências
 
 ```bash
 npm install
 ```
 
-### 2. Criar o projeto no Supabase
+### 2. Configurar o Supabase
 
-Crie um projeto no Supabase e execute o arquivo:
+Crie um projeto no Supabase e execute no SQL Editor:
 
 ```text
 database/schema.sql
 ```
 
-Use o **SQL Editor** do Supabase.
+### 3. Configurar variáveis de ambiente
 
-### 3. Configurar variÃ¡veis de ambiente
-
-Copie o arquivo `.env.example` para `.env.local`:
+Copie `.env.example` para `.env.local`:
 
 ```bash
 cp .env.example .env.local
@@ -71,58 +59,41 @@ NEXT_PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLICA
 ```
 
-Esses valores ficam no painel do Supabase em **Project Settings > API**.
+Para criar administradores, operadores e usuários de leitura pelo próprio site em `Cadastros > Usuários`, configure também no servidor/Vercel:
 
-### 4. Criar o primeiro usuÃ¡rio administrador
+```env
+SUPABASE_SERVICE_ROLE_KEY=SUA_SERVICE_ROLE_KEY
+```
 
-VocÃª tem duas opÃ§Ãµes.
+Essa chave deve ficar somente em variáveis de ambiente do servidor. Nunca exponha no frontend ou em repositório público.
 
-#### OpÃ§Ã£o A â€” pelo painel do Supabase
+Esses valores ficam em Project Settings > API no Supabase.
 
-No Supabase, vÃ¡ em:
+### 4. Criar o primeiro administrador
+
+No Supabase, acesse:
 
 ```text
 Authentication > Users > Add user
 ```
 
-Crie o usuário:
+Crie o usuário administrador com e-mail e senha.
 
-```text
-E-mail: admin@seudominio.com
-Senha: defina uma senha forte localmente
-```
-
-Depois vÃ¡ em **SQL Editor** e execute:
+Depois, edite o e-mail dentro de:
 
 ```text
 database/configurar_admin.sql
 ```
 
-Isso garante que o perfil do usuÃ¡rio fique como:
+E execute no SQL Editor.
+
+Se o painel retornar 401/403, execute também:
 
 ```text
-role: admin
-status: active
+database/corrigir_permissoes_e_admin.sql
 ```
 
-#### OpÃ§Ã£o B â€” via script local
-
-No `.env.local`, alÃ©m das variÃ¡veis pÃºblicas do Supabase, configure tambÃ©m:
-
-```env
-SUPABASE_SERVICE_ROLE_KEY=SUA_SERVICE_ROLE_KEY
-ADMIN_EMAIL=admin@seudominio.com
-ADMIN_PASSWORD=DEFINA_UMA_SENHA_FORTE_AQUI
-ADMIN_NAME=Administrador Avalia Saúde
-```
-
-Depois rode:
-
-```bash
-npm run setup:admin
-```
-
-A `SUPABASE_SERVICE_ROLE_KEY` deve ser usada apenas localmente para criar/atualizar o administrador. NÃ£o publique `.env.local` no GitHub.
+Lembre-se de trocar `admin@seudominio.com` pelo e-mail real do administrador.
 
 ### 5. Rodar o projeto
 
@@ -138,32 +109,51 @@ http://localhost:3000
 
 ## Deploy na Vercel
 
-1. Suba este projeto para um repositÃ³rio GitHub.
-2. Importe o projeto na Vercel.
-3. Configure as variÃ¡veis de ambiente na Vercel:
+1. Suba o projeto para o GitHub.
+2. Importe o repositório na Vercel.
+3. Configure as variáveis de ambiente:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-4. FaÃ§a o deploy.
+   - `SUPABASE_SERVICE_ROLE_KEY`, caso queira criar usuários pelo site
+   - `ADMIN_CREATION_PASSWORD`, caso queira criar ou promover administradores pelo site
+4. Faça o deploy.
 
-NÃ£o Ã© necessÃ¡rio configurar `SUPABASE_SERVICE_ROLE_KEY` na Vercel para esta versÃ£o.
+## Comandos úteis
 
-## ObservaÃ§Ãµes importantes
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
-- A senha dos usuÃ¡rios fica no Supabase Auth, nÃ£o na tabela `profiles`.
-- As permissÃµes estÃ£o no banco via RLS.
-- UsuÃ¡rios com perfil `viewer` visualizam dados, mas nÃ£o devem alterar cadastros.
-- UsuÃ¡rios `operator` podem cadastrar pacientes e avaliaÃ§Ãµes.
-- UsuÃ¡rios `admin` tÃªm acesso completo.
-- O arquivo `.env.local` nÃ£o deve ser enviado ao GitHub.
+## Observações importantes
 
-## PrÃ³ximo passo recomendado
+- Senhas ficam no Supabase Auth, nunca em tabela pública.
+- Permissões são controladas por RLS no banco.
+- Usuários `viewer` visualizam dados.
+- Usuários `operator` podem cadastrar pacientes e avaliações.
+- Usuários `admin` têm acesso completo e podem criar outros administradores pelo site quando `SUPABASE_SERVICE_ROLE_KEY` estiver configurada.
+- O arquivo `.env.local` não deve ser enviado ao GitHub.
 
-A prÃ³xima etapa Ã© melhorar a parte de CRUD com:
+## Senha adicional para criar administradores
 
-- ediÃ§Ã£o completa de pacientes;
-- ediÃ§Ã£o completa de unidades;
-- ediÃ§Ã£o completa de profissionais;
-- tela administrativa para alterar perfil dos usuÃ¡rios;
-- filtros por perÃ­odo no painel e no ranking;
-- revisÃ£o visual mais completa antes de salvar avaliaÃ§Ã£o;
-- exportaÃ§Ã£o de relatÃ³rios.
+Para criar ou promover usuários com perfil **Administrador** pelo próprio site, configure também:
+
+```env
+ADMIN_CREATION_PASSWORD=SENHA_EXTRA_DE_ADMIN
+```
+
+Você pode usar o mesmo valor da senha do seu usuário administrador, mas não coloque essa senha no código fonte. Configure somente no `.env.local` ou nas variáveis de ambiente da Vercel. Operadores e perfis de leitura não exigem essa senha adicional.
+
+
+## Atualização: performance, observações e gestão de usuários
+
+Esta versão otimiza a navegação entre Painel, Avalie, Ranking e Cadastros. Com `SUPABASE_SERVICE_ROLE_KEY` configurada no servidor, as consultas de dashboard, ranking e dados base do formulário usam cache curto de servidor e são revalidadas automaticamente após cadastros e novas avaliações.
+
+No Painel, a seção **Observações recentes das avaliações** permite ler os comentários preenchidos no campo de observações do formulário.
+
+Em **Cadastros > Usuários**, administradores podem criar, editar, alterar senha, alterar perfil/status e excluir usuários. Para criar, promover ou excluir usuários administradores, configure também:
+
+```env
+ADMIN_CREATION_PASSWORD=SUA_SENHA_EXTRA
+```

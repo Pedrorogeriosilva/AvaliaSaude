@@ -1,13 +1,52 @@
+import { getCurrentProfile } from '@/lib/auth';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { SectionCard } from '@/components/ui/section-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DEFAULT_PAGE_SIZE, getPage, getRange } from '@/lib/pagination';
+import { getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
-import { createProfessionalAction, toggleProfessionalStatusAction } from '../actions';
+import { createProfessionalAction, deleteProfessionalAction, updateProfessionalAction } from '../actions';
 
-type Props = { searchParams?: Promise<{ q?: string; page?: string; error?: string }> };
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+type Props = { searchParams?: Promise<{ q?: string; page?: string; error?: string; success?: string }> };
+
+type UnitOption = {
+  id: string;
+  name: string;
+};
+
+type ProfessionalRawRow = {
+  id: string;
+  full_name: string;
+  position: string | null;
+  professional_license: string | null;
+  health_unit_id: string | null;
+  work_schedule: string | null;
+  status: string | null;
+  health_units: { name: string | null } | { name: string | null }[] | null;
+};
+
+type ProfessionalRow = Omit<ProfessionalRawRow, 'health_units'> & {
+  health_unit_name: string | null;
+};
+
+function normalizeProfessional(row: ProfessionalRawRow): ProfessionalRow {
+  const relation = Array.isArray(row.health_units) ? row.health_units[0] : row.health_units;
+  return {
+    id: row.id,
+    full_name: row.full_name,
+    position: row.position,
+    professional_license: row.professional_license,
+    health_unit_id: row.health_unit_id,
+    work_schedule: row.work_schedule,
+    status: row.status,
+    health_unit_name: relation?.name || null,
+  };
+}
 
 export default async function ProfissionaisPage({ searchParams }: Props) {
   const params = searchParams ? await searchParams : {};
@@ -17,16 +56,35 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
 
   try {
     const supabase = await createClient();
-    const { data: units } = await supabase.from('health_units').select('id, name').eq('status', 'active').order('name');
-    let request = supabase.from('professionals').select('id, full_name, position, work_schedule, status, health_units(name)').order('full_name').range(from, to);
-    if (query) request = request.ilike('full_name', `%${query}%`);
-    const { data: professionals } = await request;
-    const professionalRows = professionals || [];
+    const currentProfile = await getCurrentProfile();
+    const isAdmin = currentProfile?.role === 'admin';
+    let professionalsRequest = supabase
+      .from('professionals')
+      .select('id, full_name, position, professional_license, health_unit_id, work_schedule, status, health_units(name)')
+      .order('full_name')
+      .range(from, to);
+
+    if (query) professionalsRequest = professionalsRequest.ilike('full_name', `%${query}%`);
+
+    const [{ data: units, error: unitsError }, { data: professionals, error: professionalsError }] = await Promise.all([
+      supabase.from('health_units').select('id, name').order('name'),
+      professionalsRequest,
+    ]);
+
+    const error = unitsError || professionalsError;
+
+    if (error) {
+      return <EmptyState title="Profissionais indisponíveis" description={getFriendlySupabaseError(error, 'Não foi possível carregar a listagem de profissionais.')} />;
+    }
+
+    const unitRows = (units || []) as UnitOption[];
+    const professionalRows = ((professionals || []) as ProfessionalRawRow[]).map(normalizeProfessional);
     const hasNextPage = professionalRows.length === DEFAULT_PAGE_SIZE;
 
     return (
       <>
         <PageHeader title="Profissionais" description="Cadastro de profissionais vinculados às unidades de saúde." />
+        {params.success ? <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">{params.success}</div> : null}
         {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{params.error}</div> : null}
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <SectionCard title="Novo profissional">
@@ -34,58 +92,80 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
               <Input label="Nome completo" name="full_name" required />
               <Input label="Cargo/Função" name="position" required />
               <Input label="Conselho/Registro" name="professional_license" />
-              <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-slate-700">Unidade vinculada</span>
-                <select name="health_unit_id" required className="w-full rounded-lg border border-slate-300 px-3 py-2">
-                  <option value="">Selecione</option>
-                  {(units || []).map((unit: any) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-                </select>
-              </label>
+              <UnitSelect units={unitRows} />
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">Horário de trabalho</span>
-                <textarea name="work_schedule" rows={3} placeholder="Ex.: Segunda a sexta, 07h às 13h" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                <textarea name="work_schedule" rows={3} placeholder="Ex.: Segunda a sexta, 07h às 13h" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-blue-600" />
               </label>
               <button className="w-full rounded-lg bg-blue-700 px-4 py-2.5 font-semibold text-white hover:bg-blue-800">Cadastrar profissional</button>
             </form>
           </SectionCard>
 
-          <SectionCard title="Profissionais cadastrados" description="Busca por nome com listagem paginada.">
+          <SectionCard title="Profissionais cadastrados" description="Edite dados, unidade vinculada, status ou exclua definitivamente o profissional.">
             <form className="mb-4 flex gap-2">
-              <input name="q" defaultValue={query} placeholder="Buscar profissional" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+              <input name="q" defaultValue={query} placeholder="Buscar profissional" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-blue-600" />
               <button className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50">Buscar</button>
             </form>
-            <div className="table-responsive">
-              <table className="w-full min-w-[860px] text-sm">
-                <thead>
-                  <tr className="border-b bg-slate-50 text-left text-slate-600">
-                    <th className="px-3 py-3">Nome</th>
-                    <th className="px-3 py-3">Cargo</th>
-                    <th className="px-3 py-3">Unidade</th>
-                    <th className="px-3 py-3">Horário</th>
-                    <th className="px-3 py-3">Status</th>
-                    <th className="px-3 py-3">Ação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {professionalRows.map((professional: any) => (
-                    <tr key={professional.id} className="border-b last:border-0">
-                      <td className="px-3 py-3 font-semibold text-slate-900">{professional.full_name}</td>
-                      <td className="px-3 py-3">{professional.position}</td>
-                      <td className="px-3 py-3">{professional.health_units?.name || '-'}</td>
-                      <td className="px-3 py-3">{professional.work_schedule || '-'}</td>
-                      <td className="px-3 py-3"><StatusBadge status={professional.status} /></td>
-                      <td className="px-3 py-3">
-                        <form action={toggleProfessionalStatusAction}>
-                          <input type="hidden" name="id" value={professional.id} />
-                          <input type="hidden" name="status" value={professional.status} />
-                          <button className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50">{professional.status === 'active' ? 'Inativar' : 'Ativar'}</button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                  {!professionalRows.length ? <tr><td colSpan={6} className="px-3 py-8"><EmptyState title="Nenhum profissional encontrado" description="Cadastre profissionais ou ajuste a busca para visualizar resultados." /></td></tr> : null}
-                </tbody>
-              </table>
+            <div className="space-y-4">
+              {professionalRows.map((professional) => (
+                <div key={professional.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                  {isAdmin ? (
+                    <form action={updateProfessionalAction} className="space-y-3">
+                      <input type="hidden" name="id" value={professional.id} />
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <InlineInput label="Nome" name="full_name" defaultValue={professional.full_name} required />
+                        <InlineInput label="Cargo/Função" name="position" defaultValue={professional.position || ''} required />
+                        <InlineInput label="Conselho/Registro" name="professional_license" defaultValue={professional.professional_license || ''} />
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-semibold text-slate-500">Status</span>
+                          <select name="status" defaultValue={professional.status || 'active'} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 outline-none focus:border-blue-600">
+                            <option value="active">Ativo</option>
+                            <option value="inactive">Inativo</option>
+                          </select>
+                        </label>
+                        <label className="block md:col-span-2">
+                          <span className="mb-1 block text-xs font-semibold text-slate-500">Unidade vinculada</span>
+                          <select name="health_unit_id" defaultValue={professional.health_unit_id || ''} required className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 outline-none focus:border-blue-600">
+                            <option value="">Selecione</option>
+                            {unitRows.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                          </select>
+                        </label>
+                        <label className="block md:col-span-2">
+                          <span className="mb-1 block text-xs font-semibold text-slate-500">Horário de trabalho</span>
+                          <textarea name="work_schedule" rows={2} defaultValue={professional.work_schedule || ''} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 outline-none focus:border-blue-600" />
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <StatusBadge status={professional.status} />
+                          <span>{professional.health_unit_name || 'Sem unidade'}</span>
+                        </div>
+                        <button className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Salvar alterações</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="grid gap-2 text-sm md:grid-cols-5">
+                      <strong className="text-slate-900">{professional.full_name}</strong>
+                      <span>{professional.position || '-'}</span>
+                      <span>{professional.health_unit_name || '-'}</span>
+                      <span>{professional.work_schedule || '-'}</span>
+                      <StatusBadge status={professional.status} />
+                    </div>
+                  )}
+
+                  {isAdmin ? (
+                    <form action={deleteProfessionalAction} className="mt-3 grid gap-2 rounded-lg border border-red-100 bg-red-50 p-3 md:grid-cols-[1fr_130px] md:items-center">
+                      <input type="hidden" name="id" value={professional.id} />
+                      <label className="flex items-center gap-2 text-xs font-semibold text-red-800">
+                        <input type="checkbox" name="confirm_delete" value="1" required />
+                        Excluir definitivamente este profissional. As notas individuais vinculadas a ele serão removidas.
+                      </label>
+                      <button className="rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100">Excluir</button>
+                    </form>
+                  ) : null}
+                </div>
+              ))}
+              {!professionalRows.length ? <EmptyState title="Nenhum profissional encontrado" description="Cadastre profissionais ou ajuste a busca para visualizar resultados." /> : null}
             </div>
             <PaginationControls page={page} hasNextPage={hasNextPage} basePath="/cadastros/profissionais" query={query} />
           </SectionCard>
@@ -93,15 +173,36 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
       </>
     );
   } catch {
-    return <EmptyState title="Profissionais indisponíveis" description="Não foi possível carregar a listagem de profissionais." />;
+    return <EmptyState title="Profissionais indisponíveis" description="Não foi possível carregar a listagem de profissionais. Confira a configuração do Supabase." />;
   }
+}
+
+function UnitSelect({ units }: { units: UnitOption[] }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-semibold text-slate-700">Unidade vinculada</span>
+      <select name="health_unit_id" required className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-blue-600">
+        <option value="">Selecione</option>
+        {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+      </select>
+    </label>
+  );
 }
 
 function Input({ label, name, required = false }: { label: string; name: string; required?: boolean }) {
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-slate-700">{label}</span>
-      <input name={name} required={required} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+      <input name={name} required={required} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-blue-600" />
+    </label>
+  );
+}
+
+function InlineInput({ label, name, required = false, defaultValue = '' }: { label: string; name: string; required?: boolean; defaultValue?: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span>
+      <input name={name} required={required} defaultValue={defaultValue} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 outline-none focus:border-blue-600" />
     </label>
   );
 }

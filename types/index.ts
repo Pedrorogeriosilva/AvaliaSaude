@@ -56,6 +56,18 @@ export type CityMonthlyMetric = {
   avg_general_score: number | string | null;
 };
 
+
+export type EvaluationNote = {
+  id: string;
+  attendance_date: string;
+  manifestation: ManifestationType | string | null;
+  general_score: number | string | null;
+  general_notes: string | null;
+  patient_name: string;
+  health_unit_name: string;
+  created_at: string;
+};
+
 export type ProfessionalMetric = {
   professional_id: string;
   professional_name: string;

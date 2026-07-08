@@ -7,28 +7,22 @@ export async function createClient() {
   const { url, anonKey } = getSupabaseEnv();
 
   if (!url || !anonKey) {
-    throw new Error('Supabase environment variables are not configured.');
+    throw new Error('Configuração do Supabase incompleta. Confira NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.');
   }
 
-  return createServerClient(
-    url,
-    anonKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
-            );
-          } catch {
-            // Pode acontecer quando chamado em Server Component.
-            // O middleware cuida da atualização de sessão.
-          }
-        },
+  return createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        } catch {
+          // Em Server Components os cookies podem ser somente leitura.
+          // O middleware mantém a sessão atualizada nas requisições seguintes.
+        }
       },
     },
-  );
+  });
 }

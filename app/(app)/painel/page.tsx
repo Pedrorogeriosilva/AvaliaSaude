@@ -4,9 +4,13 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SectionCard } from '@/components/ui/section-card';
 import { StatCard } from '@/components/ui/stat-card';
-import { formatInteger, formatNumber, labelUnitType } from '@/lib/format';
-import { createClient } from '@/lib/supabase/server';
-import type { CityMonthlyMetric, ProfessionalMetric, UnitMetric } from '@/types';
+import { getDashboardData } from '@/lib/app-data';
+import { formatDate, formatInteger, formatNumber, labelManifestation, labelUnitType } from '@/lib/format';
+import { getFriendlySupabaseError } from '@/lib/supabase/errors';
+import type { UnitMetric } from '@/types';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 function weightedAverage(rows: UnitMetric[], valueKey: keyof UnitMetric) {
   const total = rows.reduce((sum, row) => sum + Number(row.total_evaluations || 0), 0);
@@ -16,23 +20,12 @@ function weightedAverage(rows: UnitMetric[], valueKey: keyof UnitMetric) {
 
 export default async function PainelPage() {
   try {
-    const supabase = await createClient();
-    const [{ data: unitMetrics }, { data: cityMonthly }, { data: professionalMetrics }] = await Promise.all([
-      supabase
-        .from('v_unit_metrics')
-        .select('health_unit_id, health_unit_name, health_unit_type, total_evaluations, avg_general_score, avg_satisfaction_score, resolution_rate, avg_wait_time_minutes')
-        .order('avg_general_score', { ascending: false, nullsFirst: false }),
-      supabase.from('v_city_monthly_metrics').select('month, avg_general_score').order('month', { ascending: true }),
-      supabase
-        .from('v_professional_metrics')
-        .select('professional_id, professional_name, position, health_unit_name, total_evaluations, avg_professional_score')
-        .order('avg_professional_score', { ascending: false, nullsFirst: false })
-        .limit(5),
-    ]);
+    const { units, monthly, highlightedProfessionals, notes, error, notesError } = await getDashboardData();
 
-    const units = (unitMetrics || []) as UnitMetric[];
-    const monthly = (cityMonthly || []) as CityMonthlyMetric[];
-    const highlightedProfessionals = (professionalMetrics || []) as ProfessionalMetric[];
+    if (error) {
+      return <EmptyState title="Painel indisponível" description={getFriendlySupabaseError(error, 'Não foi possível carregar os indicadores no momento.')} />;
+    }
+
     const totalEvaluations = units.reduce((sum, row) => sum + Number(row.total_evaluations || 0), 0);
     const generalScore = weightedAverage(units, 'avg_general_score');
     const satisfactionScore = weightedAverage(units, 'avg_satisfaction_score');
@@ -41,7 +34,7 @@ export default async function PainelPage() {
 
     return (
       <>
-        <PageHeader title="Painel" description="Visão geral dos indicadores municipais e das unidades de saúde cadastradas." />
+        <PageHeader title="Painel" description="Visão geral dos indicadores municipais, desempenho das unidades e observações recentes das avaliações." />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <StatCard label="Nota geral" value={formatNumber(generalScore)} hint="Média municipal" />
@@ -52,7 +45,7 @@ export default async function PainelPage() {
         </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Evolução mensal da nota geral" description="Média geral da cidade por mês.">
+          <SectionCard title="Evolução mensal da nota geral" description="Média geral da cidade por mês. Dados otimizados para carregamento rápido.">
             {monthly.length ? <LazyMonthlyChart data={monthly} /> : <EmptyState title="Sem dados mensais" description="As métricas mensais aparecerão aqui após as primeiras avaliações." />}
           </SectionCard>
 
@@ -66,7 +59,7 @@ export default async function PainelPage() {
             <div className="table-responsive">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
-                  <tr className="border-b bg-slate-50 text-left text-slate-600">
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
                     <th className="px-3 py-3">Unidade</th>
                     <th className="px-3 py-3">Tipo</th>
                     <th className="px-3 py-3">Avaliações</th>
@@ -77,7 +70,7 @@ export default async function PainelPage() {
                 </thead>
                 <tbody>
                   {units.slice(0, 8).map((unit) => (
-                    <tr key={unit.health_unit_id} className="border-b last:border-0">
+                    <tr key={unit.health_unit_id} className="border-b border-slate-100 last:border-0">
                       <td className="px-3 py-3 font-semibold text-slate-900">{unit.health_unit_name}</td>
                       <td className="px-3 py-3">{labelUnitType(unit.health_unit_type)}</td>
                       <td className="px-3 py-3">{formatInteger(unit.total_evaluations)}</td>
@@ -95,7 +88,7 @@ export default async function PainelPage() {
           <SectionCard title="Profissionais em destaque" description="Maiores médias individuais registradas.">
             <div className="space-y-3">
               {highlightedProfessionals.map((professional, index) => (
-                <div key={professional.professional_id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+                <div key={professional.professional_id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">{index + 1}. {professional.professional_name}</div>
                     <div className="text-xs text-slate-500">{professional.position} · {professional.health_unit_name}</div>
@@ -107,9 +100,36 @@ export default async function PainelPage() {
             </div>
           </SectionCard>
         </div>
+
+        <div className="mt-6">
+          <SectionCard title="Observações recentes das avaliações" description="Leitura rápida dos últimos comentários registrados no formulário de avaliação.">
+            {notesError ? (
+              <EmptyState title="Observações indisponíveis" description={getFriendlySupabaseError(notesError, 'Não foi possível carregar as observações das avaliações.')} />
+            ) : notes.length ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {notes.map((note) => (
+                  <article key={note.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <span className="rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700">{labelManifestation(note.manifestation)}</span>
+                      <span>{formatDate(note.attendance_date)}</span>
+                      <span>Nota {formatNumber(note.general_score, 0)}</span>
+                    </div>
+                    <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-700">{note.general_notes}</p>
+                    <div className="mt-3 text-xs text-slate-500">
+                      <span className="font-semibold text-slate-700">{note.health_unit_name}</span>
+                      <span> · {note.patient_name}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Nenhuma observação registrada" description="Quando o campo de observações for preenchido nas avaliações, os comentários recentes aparecerão aqui." />
+            )}
+          </SectionCard>
+        </div>
       </>
     );
   } catch {
-    return <EmptyState title="Painel indisponível" description="Não foi possível carregar os indicadores no momento." />;
+    return <EmptyState title="Painel indisponível" description="Não foi possível carregar os indicadores. Confira a configuração do Supabase e tente novamente." />;
   }
 }

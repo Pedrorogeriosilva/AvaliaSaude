@@ -1,6 +1,6 @@
 import Link from 'next/link';
+import { Building2, ShieldCheck, Stethoscope, Users } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
-import { Users, Building2, Stethoscope, ShieldCheck } from 'lucide-react';
 
 const cards = [
   {
@@ -41,11 +41,11 @@ export default function CadastrosPage() {
         {cards.map((card) => {
           const Icon = card.icon;
           return (
-            <Link key={card.href} href={card.href} className="rounded-xl border border-slate-200 bg-white p-6 gov-shadow hover:border-blue-300">
+            <Link key={card.href} href={card.href} prefetch className="rounded-xl border border-slate-200 bg-white p-6 transition hover:border-blue-300 hover:bg-slate-50">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
                 <Icon size={24} />
               </div>
-              <h2 className="text-lg font-bold text-slate-950">{card.title}</h2>
+              <h2 className="text-lg font-semibold text-slate-950">{card.title}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">{card.description}</p>
             </Link>
           );

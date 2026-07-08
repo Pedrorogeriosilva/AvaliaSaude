@@ -1,24 +1,32 @@
-# Notas da versão inicial
+# Notas da versão
 
-Esta versão é uma base funcional para o projeto Avalia Saúde.
+Esta versão foi revisada para melhorar estabilidade, navegação, visual institucional e integração com Supabase.
 
-## Entrega atual
+## Principais ajustes
 
-- Sistema com estrutura visual pronta.
-- Autenticação com Supabase Auth.
-- Rotas protegidas.
-- CRUD inicial com criação, busca, listagem e ativação/inativação.
-- Registro de avaliação com notas gerais e notas por profissional.
-- Painel e ranking consumindo views do banco.
+- Logo nova aplicada em `public/brand`.
+- Header mais limpo, com navegação sem prefetch para reduzir erro de chunk em ambiente local.
+- Tratamento de erro aprimorado nas páginas protegidas.
+- Login e logout corrigidos.
+- Salvamento de avaliação corrigido.
+- Validação de perfil ativo pela tabela `profiles`.
+- SQL adicional para corrigir permissões 401/403 no Supabase.
+- Cards, tabelas e formulários ajustados para visual mais clean.
 
-## Limitações conscientes desta primeira versão
+## Arquivos importantes
 
-- Ainda não há tela de edição completa dos registros.
-- O cadastro de usuários ainda depende do Supabase Auth e ajuste de perfil via SQL.
-- A revisão antes de salvar a avaliação usa confirmação simples do navegador.
-- Os filtros avançados de período/unidade ainda serão implementados.
-- A geração de relatórios PDF/Excel ainda não está incluída.
+- `database/schema.sql`: schema principal atualizado.
+- `database/configurar_admin.sql`: configura o primeiro administrador.
+- `database/corrigir_permissoes_e_admin.sql`: correção rápida para 401/403 e perfil admin.
+- `CORRECOES_APLICADAS.md`: resumo técnico do que foi alterado.
 
-## Próxima etapa sugerida
+## Validação
 
-Implementar edição de registros e filtros avançados no painel.
+Foram executados com sucesso:
+
+```bash
+npm run lint
+npx tsc --noEmit
+```
+
+Também foi validado que o login abre corretamente em ambiente local e que rotas protegidas redirecionam para o login quando o Supabase não está configurado.

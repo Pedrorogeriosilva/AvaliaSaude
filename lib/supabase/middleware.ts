@@ -1,11 +1,26 @@
-import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSupabaseEnv, isSupabaseConfigured } from './config';
+import { isSupabaseConfigured } from './config';
+
+function redirectToLogin(request: NextRequest, message?: string) {
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = '/login';
+  loginUrl.search = '';
+
+  if (message) {
+    loginUrl.searchParams.set('error', message);
+  }
+
+  return NextResponse.redirect(loginUrl);
+}
+
+function hasSupabaseSessionCookie(request: NextRequest) {
+  return request.cookies.getAll().some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token'));
+}
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isLoginRoute = pathname.startsWith('/login');
-  const isPublicAsset = pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.includes('.');
+  const isPublicAsset = pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/brand') || pathname.includes('.');
 
   if (isPublicAsset) {
     return NextResponse.next({ request });
@@ -13,54 +28,16 @@ export async function updateSession(request: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     if (isLoginRoute) return NextResponse.next({ request });
+    return redirectToLogin(request, 'Configuração do Supabase incompleta.');
+  }
+
+  if (!isLoginRoute && !hasSupabaseSessionCookie(request)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
-    loginUrl.searchParams.set('error', 'Configuração do Supabase incompleta.');
+    loginUrl.search = '';
+    loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  const { url, anonKey } = getSupabaseEnv();
-  let supabaseResponse = NextResponse.next({ request });
-
-  try {
-    const supabase = createServerClient(url!, anonKey!, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options));
-        },
-      },
-    });
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user && !isLoginRoute) {
-      const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = '/login';
-      loginUrl.searchParams.set('next', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-
-    if (user && isLoginRoute) {
-      const painelUrl = request.nextUrl.clone();
-      painelUrl.pathname = '/painel';
-      painelUrl.search = '';
-      return NextResponse.redirect(painelUrl);
-    }
-  } catch {
-    if (!isLoginRoute) {
-      const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = '/login';
-      loginUrl.searchParams.set('error', 'Falha ao conectar com o Supabase.');
-      return NextResponse.redirect(loginUrl);
-    }
-  }
-
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }

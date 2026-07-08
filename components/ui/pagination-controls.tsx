@@ -13,11 +13,21 @@ function buildHref(basePath: string, page: number, query?: string) {
 export function PaginationControls({ page, hasNextPage, basePath, query }: Props) {
   return (
     <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4">
-      <Link href={buildHref(basePath, Math.max(1, page - 1), query)} prefetch={false} aria-disabled={page <= 1} className={`rounded-lg border px-4 py-2 text-sm font-semibold ${page <= 1 ? 'pointer-events-none border-slate-200 text-slate-300' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
+      <Link
+        href={buildHref(basePath, Math.max(1, page - 1), query)}
+        prefetch={false}
+        aria-disabled={page <= 1}
+        className={`rounded-lg border px-4 py-2 text-sm font-semibold ${page <= 1 ? 'pointer-events-none border-slate-200 text-slate-300' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+      >
         Anterior
       </Link>
       <span className="text-sm text-slate-500">Página {page}</span>
-      <Link href={buildHref(basePath, page + 1, query)} prefetch={false} aria-disabled={!hasNextPage} className={`rounded-lg border px-4 py-2 text-sm font-semibold ${!hasNextPage ? 'pointer-events-none border-slate-200 text-slate-300' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
+      <Link
+        href={buildHref(basePath, page + 1, query)}
+        prefetch={false}
+        aria-disabled={!hasNextPage}
+        className={`rounded-lg border px-4 py-2 text-sm font-semibold ${!hasNextPage ? 'pointer-events-none border-slate-200 text-slate-300' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+      >
         Próxima
       </Link>
     </div>

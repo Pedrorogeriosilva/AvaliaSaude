@@ -596,6 +596,36 @@ grant execute on function public.current_user_role() to authenticated;
 grant execute on function public.is_active_user() to authenticated;
 grant execute on function public.has_app_role(public.app_user_role[]) to authenticated;
 
+
+-- ============================================================
+-- 10.1 GRANTS EXPLÍCITOS PARA EVITAR ERROS 401/403 NA API
+-- ============================================================
+-- Em alguns projetos Supabase novos, as permissões de API podem não ser
+-- aplicadas automaticamente a todas as tabelas customizadas. Estes grants
+-- liberam o acesso para usuários autenticados; a regra final continua sendo
+-- controlada pelas políticas de RLS acima.
+
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table
+  public.profiles,
+  public.patients,
+  public.health_units,
+  public.professionals,
+  public.evaluations,
+  public.evaluation_professionals
+  to authenticated;
+
+grant select on table
+  public.v_city_monthly_metrics,
+  public.v_unit_metrics,
+  public.v_unit_monthly_metrics,
+  public.v_professional_metrics
+  to authenticated;
+
+grant execute on function public.current_user_role() to authenticated;
+grant execute on function public.is_active_user() to authenticated;
+grant execute on function public.has_app_role(public.app_user_role[]) to authenticated;
+
 -- ============================================================
 -- 11. DADOS DE EXEMPLO OPCIONAIS
 -- ============================================================

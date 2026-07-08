@@ -1,10 +1,10 @@
-type Props = { title: string; description: string };
+type Props = { title: string; description?: string };
 
 export function EmptyState({ title, description }: Props) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
-      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+    <div className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-center">
+      <div className="text-sm font-semibold text-slate-900">{title}</div>
+      {description ? <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">{description}</p> : null}
     </div>
   );
 }
