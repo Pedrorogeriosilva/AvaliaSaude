@@ -1,17 +1,15 @@
-import { getCurrentProfile } from '@/lib/auth';
+import { DisclosureCard } from '@/components/ui/disclosure-card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { SectionCard } from '@/components/ui/section-card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { formatDate } from '@/lib/format';
+import { getCurrentProfile } from '@/lib/auth';
+import { formatDate, maskCpf } from '@/lib/format';
 import { DEFAULT_PAGE_SIZE, getPage, getRange } from '@/lib/pagination';
-import { getFriendlySupabaseError } from '@/lib/supabase/errors';
+import { getFriendlyErrorMessage, getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
 import { createPatientAction, deletePatientAction, updatePatientAction } from '../actions';
-
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 type Props = { searchParams?: Promise<{ q?: string; page?: string; error?: string; success?: string }> };
 
@@ -36,9 +34,6 @@ export default async function PacientesPage({ searchParams }: Props) {
 
   try {
     const supabase = await createClient();
-    const currentProfile = await getCurrentProfile();
-    const canEdit = currentProfile?.role === 'admin' || currentProfile?.role === 'operator';
-    const canDelete = currentProfile?.role === 'admin';
     let request = supabase
       .from('patients')
       .select('id, full_name, cpf, birth_date, phone, whatsapp, address, neighborhood, created_at, status')
@@ -47,10 +42,12 @@ export default async function PacientesPage({ searchParams }: Props) {
 
     if (query) request = request.ilike('full_name', `%${query}%`);
 
-    const { data: patients, error } = await request;
+    const [{ data: patients, error }, currentProfile] = await Promise.all([request, getCurrentProfile()]);
+    const canEdit = currentProfile?.role === 'admin' || currentProfile?.role === 'operator';
+    const canDelete = currentProfile?.role === 'admin';
 
     if (error) {
-      return <EmptyState title="Pacientes indisponíveis" description={getFriendlySupabaseError(error, 'Não foi possível carregar a listagem de pacientes.')} />;
+      return <EmptyState title="Não foi possível carregar os dados." description={getFriendlySupabaseError(error, 'Não foi possível carregar a listagem de pacientes.')} />;
     }
 
     const patientRows = (patients || []) as PatientRow[];
@@ -58,31 +55,45 @@ export default async function PacientesPage({ searchParams }: Props) {
 
     return (
       <>
-        <PageHeader title="Pacientes" description="Cadastro de pacientes vinculados às avaliações de atendimento." />
+        <PageHeader title="Pacientes" />
         {params.success ? <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">{params.success}</div> : null}
-        {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{params.error}</div> : null}
+        {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{getFriendlyErrorMessage(params.error)}</div> : null}
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <SectionCard title="Novo paciente">
-            <form action={createPatientAction} className="space-y-3">
-              <Input label="Nome completo" name="full_name" required />
-              <Input label="CPF" name="cpf" placeholder="Somente números" />
-              <Input label="Data de nascimento" name="birth_date" type="date" />
-              <Input label="Telefone" name="phone" />
-              <Input label="WhatsApp" name="whatsapp" />
-              <Input label="Endereço" name="address" />
-              <Input label="Bairro" name="neighborhood" />
-              <button className="w-full rounded-lg bg-blue-700 px-4 py-2.5 font-semibold text-white hover:bg-blue-800">Cadastrar paciente</button>
-            </form>
+          <SectionCard title={canEdit ? 'Novo paciente' : 'Cadastro protegido'}>
+            {canEdit ? (
+              <form action={createPatientAction} className="space-y-3">
+                <Input label="Nome completo" name="full_name" required />
+                <Input label="CPF" name="cpf" placeholder="Somente números" />
+                <Input label="Data de nascimento" name="birth_date" type="date" />
+                <Input label="Telefone" name="phone" />
+                <Input label="WhatsApp" name="whatsapp" />
+                <Input label="Endereço" name="address" />
+                <Input label="Bairro" name="neighborhood" />
+                <button className="w-full rounded-lg bg-blue-700 px-4 py-2.5 font-semibold text-white hover:bg-blue-800">Cadastrar paciente</button>
+              </form>
+            ) : (
+              <EmptyState title="Somente leitura." />
+            )}
           </SectionCard>
 
-          <SectionCard title="Pacientes cadastrados" description="Edite os dados do paciente ou exclua definitivamente quando necessário. Pacientes criados durante a avaliação também aparecem aqui.">
+          <SectionCard title="Pacientes cadastrados">
             <form className="mb-4 flex gap-2">
               <input name="q" defaultValue={query} placeholder="Buscar paciente" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-blue-600" />
               <button className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50">Buscar</button>
             </form>
             <div className="space-y-4">
               {patientRows.map((patient) => (
-                <div key={patient.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                <DisclosureCard
+                  key={patient.id}
+                  title={patient.full_name}
+                  description={[patient.cpf ? `CPF ${maskCpf(patient.cpf)}` : '', patient.phone || patient.whatsapp || '', patient.neighborhood || ''].filter(Boolean).join(' · ') || 'Sem informações complementares'}
+                  meta={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={patient.status} />
+                      <span>Cadastrado em {formatDate(patient.created_at?.slice(0, 10))}</span>
+                    </div>
+                  }
+                >
                   {canEdit ? (
                     <form action={updatePatientAction} className="space-y-3">
                       <input type="hidden" name="id" value={patient.id} />
@@ -102,11 +113,7 @@ export default async function PacientesPage({ searchParams }: Props) {
                         <InlineInput label="Endereço" name="address" defaultValue={patient.address || ''} />
                         <InlineInput label="Bairro" name="neighborhood" defaultValue={patient.neighborhood || ''} />
                       </div>
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                          <StatusBadge status={patient.status} />
-                          <span>Cadastrado em {formatDate(patient.created_at?.slice(0, 10))}</span>
-                        </div>
+                      <div className="flex justify-end border-t border-slate-100 pt-3">
                         <button className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Salvar alterações</button>
                       </div>
                     </form>
@@ -120,7 +127,7 @@ export default async function PacientesPage({ searchParams }: Props) {
                   )}
 
                   {canDelete ? (
-                    <form action={deletePatientAction} className="mt-3 grid gap-2 rounded-lg border border-red-100 bg-red-50 p-3 md:grid-cols-[1fr_130px] md:items-center">
+                    <form action={deletePatientAction} className="mt-4 grid gap-2 rounded-lg border border-red-100 bg-red-50 p-3 md:grid-cols-[1fr_130px] md:items-center">
                       <input type="hidden" name="id" value={patient.id} />
                       <label className="flex items-center gap-2 text-xs font-semibold text-red-800">
                         <input type="checkbox" name="confirm_delete" value="1" required />
@@ -129,9 +136,9 @@ export default async function PacientesPage({ searchParams }: Props) {
                       <button className="rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100">Excluir</button>
                     </form>
                   ) : null}
-                </div>
+                </DisclosureCard>
               ))}
-              {!patientRows.length ? <EmptyState title="Nenhum paciente encontrado" description="Cadastre pacientes ou ajuste a busca para visualizar resultados." /> : null}
+              {!patientRows.length ? <EmptyState title="Nenhum registro encontrado." /> : null}
             </div>
             <PaginationControls page={page} hasNextPage={hasNextPage} basePath="/cadastros/pacientes" query={query} />
           </SectionCard>
@@ -139,7 +146,7 @@ export default async function PacientesPage({ searchParams }: Props) {
       </>
     );
   } catch {
-    return <EmptyState title="Pacientes indisponíveis" description="Não foi possível carregar a listagem de pacientes. Confira a configuração do Supabase." />;
+    return <EmptyState title="Não foi possível carregar os dados." />;
   }
 }
 

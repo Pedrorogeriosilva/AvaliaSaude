@@ -9,67 +9,87 @@ import { formatDate, formatInteger, formatNumber, labelManifestation, labelUnitT
 import { getFriendlySupabaseError } from '@/lib/supabase/errors';
 import type { UnitMetric } from '@/types';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+function safeNumber(value: number | string | null | undefined) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 function weightedAverage(rows: UnitMetric[], valueKey: keyof UnitMetric) {
-  const total = rows.reduce((sum, row) => sum + Number(row.total_evaluations || 0), 0);
+  const validRows = rows.filter((row) => safeNumber(row.total_evaluations) > 0);
+  const total = validRows.reduce((sum, row) => sum + safeNumber(row.total_evaluations), 0);
+
   if (!total) return 0;
-  return rows.reduce((sum, row) => sum + Number(row[valueKey] || 0) * Number(row.total_evaluations || 0), 0) / total;
+
+  return (
+    validRows.reduce((sum, row) => sum + safeNumber(row[valueKey]) * safeNumber(row.total_evaluations), 0) / total
+  );
 }
 
 export default async function PainelPage() {
-  try {
-    const { units, monthly, highlightedProfessionals, notes, error, notesError } = await getDashboardData();
+  const dashboard = await getDashboardData();
+  const unitsWithEvaluations = dashboard.units.filter((unit) => safeNumber(unit.total_evaluations) > 0);
+  const totalEvaluations = unitsWithEvaluations.reduce((sum, row) => sum + safeNumber(row.total_evaluations), 0);
+  const generalScore = weightedAverage(unitsWithEvaluations, 'avg_general_score');
+  const satisfactionScore = weightedAverage(unitsWithEvaluations, 'avg_satisfaction_score');
+  const resolutionRate = weightedAverage(unitsWithEvaluations, 'resolution_rate');
+  const waitTime = weightedAverage(unitsWithEvaluations, 'avg_wait_time_minutes');
+  const chartUnits = [...unitsWithEvaluations]
+    .sort((left, right) => safeNumber(right.avg_general_score) - safeNumber(left.avg_general_score))
+    .slice(0, 10);
 
-    if (error) {
-      return <EmptyState title="Painel indisponível" description={getFriendlySupabaseError(error, 'Não foi possível carregar os indicadores no momento.')} />;
-    }
+  return (
+    <>
+      <PageHeader title="Painel" />
 
-    const totalEvaluations = units.reduce((sum, row) => sum + Number(row.total_evaluations || 0), 0);
-    const generalScore = weightedAverage(units, 'avg_general_score');
-    const satisfactionScore = weightedAverage(units, 'avg_satisfaction_score');
-    const resolutionRate = weightedAverage(units, 'resolution_rate');
-    const waitTime = weightedAverage(units, 'avg_wait_time_minutes');
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <StatCard label="Nota geral" value={formatNumber(generalScore)} hint="Media municipal" />
+        <StatCard label="Satisfacao" value={formatNumber(satisfactionScore)} hint="Media dos usuarios" />
+        <StatCard label="Resolucao" value={`${formatNumber(resolutionRate)}%`} hint="Atendimentos resolvidos" />
+        <StatCard label="Espera media" value={`${formatNumber(waitTime, 0)} min`} hint="Media informada" />
+        <StatCard label="Avaliacoes" value={formatInteger(totalEvaluations)} hint="Total registrado" />
+      </div>
 
-    return (
-      <>
-        <PageHeader title="Painel" description="Visão geral dos indicadores municipais, desempenho das unidades e observações recentes das avaliações." />
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <SectionCard title="Evolucao mensal da nota geral">
+          {dashboard.errors.monthly ? (
+            <EmptyState title="Nao foi possivel carregar os dados." description={getFriendlySupabaseError(dashboard.errors.monthly, 'Nao foi possivel carregar os dados.')} />
+          ) : dashboard.monthly.length ? (
+            <LazyMonthlyChart data={dashboard.monthly} />
+          ) : (
+            <EmptyState title="Sem dados." />
+          )}
+        </SectionCard>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <StatCard label="Nota geral" value={formatNumber(generalScore)} hint="Média municipal" />
-          <StatCard label="Satisfação" value={formatNumber(satisfactionScore)} hint="Média dos usuários" />
-          <StatCard label="Resolução" value={`${formatNumber(resolutionRate)}%`} hint="Atendimentos resolvidos" />
-          <StatCard label="Espera média" value={`${formatNumber(waitTime, 0)} min`} hint="Média informada" />
-          <StatCard label="Avaliações" value={formatInteger(totalEvaluations)} hint="Total registrado" />
-        </div>
+        <SectionCard title="Notas por unidade">
+          {dashboard.errors.units ? (
+            <EmptyState title="Nao foi possivel carregar os dados." description={getFriendlySupabaseError(dashboard.errors.units, 'Nao foi possivel carregar os dados.')} />
+          ) : chartUnits.length ? (
+            <LazyUnitBarChart data={chartUnits} />
+          ) : (
+            <EmptyState title="Sem dados." />
+          )}
+        </SectionCard>
+      </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Evolução mensal da nota geral" description="Média geral da cidade por mês. Dados otimizados para carregamento rápido.">
-            {monthly.length ? <LazyMonthlyChart data={monthly} /> : <EmptyState title="Sem dados mensais" description="As métricas mensais aparecerão aqui após as primeiras avaliações." />}
-          </SectionCard>
-
-          <SectionCard title="Notas por unidade" description="Até 10 unidades com maior média geral.">
-            {units.length ? <LazyUnitBarChart data={units} /> : <EmptyState title="Sem unidades avaliadas" description="Cadastre unidades e registre avaliações para visualizar este gráfico." />}
-          </SectionCard>
-        </div>
-
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Resumo por unidade" description="Indicadores consolidados das unidades de saúde.">
-            <div className="table-responsive">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <SectionCard title="Resumo por unidade">
+          {dashboard.errors.units ? (
+            <EmptyState title="Nao foi possivel carregar os dados." description={getFriendlySupabaseError(dashboard.errors.units, 'Nao foi possivel carregar os dados.')} />
+          ) : (
+            <div className="table-responsive overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
                     <th className="px-3 py-3">Unidade</th>
                     <th className="px-3 py-3">Tipo</th>
-                    <th className="px-3 py-3">Avaliações</th>
+                    <th className="px-3 py-3">Avaliacoes</th>
                     <th className="px-3 py-3">Nota</th>
-                    <th className="px-3 py-3">Resolução</th>
+                    <th className="px-3 py-3">Resolucao</th>
                     <th className="px-3 py-3">Espera</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {units.slice(0, 8).map((unit) => (
+                  {unitsWithEvaluations.slice(0, 8).map((unit) => (
                     <tr key={unit.health_unit_id} className="border-b border-slate-100 last:border-0">
                       <td className="px-3 py-3 font-semibold text-slate-900">{unit.health_unit_name}</td>
                       <td className="px-3 py-3">{labelUnitType(unit.health_unit_type)}</td>
@@ -79,57 +99,66 @@ export default async function PainelPage() {
                       <td className="px-3 py-3">{formatNumber(unit.avg_wait_time_minutes, 0)} min</td>
                     </tr>
                   ))}
-                  {!units.length ? <tr><td colSpan={6} className="px-3 py-8"><EmptyState title="Nenhuma unidade cadastrada" description="As unidades cadastradas aparecerão nesta listagem." /></td></tr> : null}
+                  {!unitsWithEvaluations.length ? (
+                    <tr>
+                      <td colSpan={6} className="px-3 py-8">
+                        <EmptyState title="Nenhum registro encontrado." />
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
-          </SectionCard>
+          )}
+        </SectionCard>
 
-          <SectionCard title="Profissionais em destaque" description="Maiores médias individuais registradas.">
+        <SectionCard title="Profissionais em destaque">
+          {dashboard.errors.professionals ? (
+            <EmptyState title="Nao foi possivel carregar os dados." description={getFriendlySupabaseError(dashboard.errors.professionals, 'Nao foi possivel carregar os dados.')} />
+          ) : dashboard.highlightedProfessionals.length ? (
             <div className="space-y-3">
-              {highlightedProfessionals.map((professional, index) => (
+              {dashboard.highlightedProfessionals.map((professional, index) => (
                 <div key={professional.professional_id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">{index + 1}. {professional.professional_name}</div>
-                    <div className="text-xs text-slate-500">{professional.position} · {professional.health_unit_name}</div>
+                    <div className="text-xs text-slate-500">{professional.position} - {professional.health_unit_name}</div>
                   </div>
                   <div className="text-lg font-semibold text-blue-700">{formatNumber(professional.avg_professional_score)}</div>
                 </div>
               ))}
-              {!highlightedProfessionals.length ? <EmptyState title="Sem profissionais em destaque" description="Os profissionais com avaliações aparecerão aqui." /> : null}
             </div>
-          </SectionCard>
-        </div>
+          ) : (
+            <EmptyState title="Nenhum profissional avaliado." />
+          )}
+        </SectionCard>
+      </div>
 
-        <div className="mt-6">
-          <SectionCard title="Observações recentes das avaliações" description="Leitura rápida dos últimos comentários registrados no formulário de avaliação.">
-            {notesError ? (
-              <EmptyState title="Observações indisponíveis" description={getFriendlySupabaseError(notesError, 'Não foi possível carregar as observações das avaliações.')} />
-            ) : notes.length ? (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {notes.map((note) => (
-                  <article key={note.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span className="rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700">{labelManifestation(note.manifestation)}</span>
-                      <span>{formatDate(note.attendance_date)}</span>
-                      <span>Nota {formatNumber(note.general_score, 0)}</span>
-                    </div>
-                    <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-700">{note.general_notes}</p>
-                    <div className="mt-3 text-xs text-slate-500">
-                      <span className="font-semibold text-slate-700">{note.health_unit_name}</span>
-                      <span> · {note.patient_name}</span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="Nenhuma observação registrada" description="Quando o campo de observações for preenchido nas avaliações, os comentários recentes aparecerão aqui." />
-            )}
-          </SectionCard>
-        </div>
-      </>
-    );
-  } catch {
-    return <EmptyState title="Painel indisponível" description="Não foi possível carregar os indicadores. Confira a configuração do Supabase e tente novamente." />;
-  }
+      <div className="mt-6">
+        <SectionCard title="Observacoes recentes">
+          {dashboard.errors.notes ? (
+            <EmptyState title="Nao foi possivel carregar os dados." description={getFriendlySupabaseError(dashboard.errors.notes, 'Nao foi possivel carregar os dados.')} />
+          ) : dashboard.notes.length ? (
+            <div className={dashboard.notes.length === 1 ? 'max-w-3xl' : 'grid gap-4 md:grid-cols-2'}>
+              {dashboard.notes.map((note) => (
+                <article key={note.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700">{labelManifestation(note.manifestation)}</span>
+                    <span>{formatDate(note.attendance_date)}</span>
+                    <span>Nota {formatNumber(note.general_score, 0)}</span>
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{note.general_notes}</p>
+                  <div className="mt-3 text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">{note.health_unit_name}</span>
+                    <span> - {note.patient_name}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Nenhuma observacao registrada." description="As avaliacoes com comentario aparecem aqui automaticamente." />
+          )}
+        </SectionCard>
+      </div>
+    </>
+  );
 }

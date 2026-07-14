@@ -3,11 +3,9 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SectionCard } from '@/components/ui/section-card';
 import { getEvaluationFormData } from '@/lib/app-data';
-import { getFriendlySupabaseError } from '@/lib/supabase/errors';
+import { getCurrentProfile } from '@/lib/auth';
+import { getFriendlyErrorMessage, getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createEvaluationAction } from './actions';
-
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 type Props = {
   searchParams?: Promise<{ success?: string; error?: string }>;
@@ -17,28 +15,39 @@ export default async function AvaliePage({ searchParams }: Props) {
   const params = searchParams ? await searchParams : {};
 
   try {
+    const currentProfile = await getCurrentProfile();
+
+    if (!currentProfile || currentProfile.role === 'viewer') {
+      return (
+        <>
+          <PageHeader title="Avalie" />
+          <EmptyState title="Acesso restrito." />
+        </>
+      );
+    }
+
     const { patients, units, professionals, error } = await getEvaluationFormData();
 
     if (error) {
-      return <EmptyState title="Avaliação indisponível" description={getFriendlySupabaseError(error, 'Não foi possível carregar os dados necessários para registrar uma avaliação.')} />;
+      return <EmptyState title="Não foi possível carregar os dados." description={getFriendlySupabaseError(error, 'Não foi possível carregar os dados.')} />;
     }
 
     return (
       <>
-        <PageHeader title="Avalie" description="Registre a avaliação do atendimento e cadastre o paciente no mesmo fluxo, quando necessário." />
+        <PageHeader title="Avalie" />
         {params.success ? <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">Avaliação salva com sucesso.</div> : null}
-        {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{params.error}</div> : null}
+        {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{getFriendlyErrorMessage(params.error)}</div> : null}
 
         {!units.length ? (
-          <EmptyState title="Cadastros incompletos" description="Cadastre ao menos uma unidade ativa antes de registrar uma avaliação." />
+          <EmptyState title="Cadastros incompletos." />
         ) : (
-          <SectionCard title="Nova avaliação" description="Os dados do novo paciente ficam salvos automaticamente no cadastro/histórico de pacientes.">
+          <SectionCard title="Nova avaliação">
             <EvaluationForm patients={patients} units={units} professionals={professionals} action={createEvaluationAction} />
           </SectionCard>
         )}
       </>
     );
   } catch {
-    return <EmptyState title="Avaliação indisponível" description="Não foi possível carregar os dados necessários para registrar uma avaliação. Confira a configuração do Supabase." />;
+    return <EmptyState title="Não foi possível carregar os dados." />;
   }
 }

@@ -5,9 +5,6 @@ import { getRankingData } from '@/lib/app-data';
 import { formatInteger, formatNumber, labelUnitType } from '@/lib/format';
 import { getFriendlySupabaseError } from '@/lib/supabase/errors';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 type RankingRow = { id: string; name: string; subtitle: string; score: string | number | null };
 
 export default async function RankingPage() {
@@ -15,36 +12,36 @@ export default async function RankingPage() {
     const { bestUnits, worstUnits, bestProfessionals, worstProfessionals, error } = await getRankingData();
 
     if (error) {
-      return <EmptyState title="Ranking indisponível" description={getFriendlySupabaseError(error, 'Não foi possível carregar o ranking no momento.')} />;
+      return <EmptyState title="Não foi possível carregar os dados." description={getFriendlySupabaseError(error, 'Não foi possível carregar os dados.')} />;
     }
 
     return (
       <>
-        <PageHeader title="Ranking" description="Comparativo de desempenho das unidades e profissionais avaliados, com consultas otimizadas para navegação mais rápida." />
+        <PageHeader title="Ranking" />
         <div className="grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Melhores unidades" description="Ordenado pela maior nota geral média.">
-            <RankingTable rows={bestUnits.map((unit) => ({ id: unit.health_unit_id, name: unit.health_unit_name, subtitle: `${labelUnitType(unit.health_unit_type)} · ${formatInteger(unit.total_evaluations)} avaliações`, score: unit.avg_general_score }))} emptyText="Sem avaliações suficientes para ranking." />
+          <SectionCard title="Melhores unidades">
+            <RankingTable rows={bestUnits.map((unit) => ({ id: unit.health_unit_id, name: unit.health_unit_name, subtitle: `${labelUnitType(unit.health_unit_type)} · ${formatInteger(unit.total_evaluations)} avaliações`, score: unit.avg_general_score }))} emptyText="Nenhuma avaliação registrada." />
           </SectionCard>
-          <SectionCard title="Unidades com atenção necessária" description="Ordenado pela menor nota geral média.">
-            <RankingTable rows={worstUnits.map((unit) => ({ id: unit.health_unit_id, name: unit.health_unit_name, subtitle: `${labelUnitType(unit.health_unit_type)} · ${formatInteger(unit.total_evaluations)} avaliações`, score: unit.avg_general_score }))} emptyText="Sem avaliações suficientes para ranking." />
+          <SectionCard title="Unidades com menor média">
+            <RankingTable rows={worstUnits.map((unit) => ({ id: unit.health_unit_id, name: unit.health_unit_name, subtitle: `${labelUnitType(unit.health_unit_type)} · ${formatInteger(unit.total_evaluations)} avaliações`, score: unit.avg_general_score }))} emptyText="Nenhuma avaliação registrada." />
           </SectionCard>
-          <SectionCard title="Profissionais mais bem avaliados" description="Ranking individual por nota média.">
-            <RankingTable rows={bestProfessionals.map((professional) => ({ id: professional.professional_id, name: professional.professional_name, subtitle: `${professional.position || 'Cargo não informado'} · ${professional.health_unit_name || 'Unidade não informada'} · ${formatInteger(professional.total_evaluations)} avaliações`, score: professional.avg_professional_score }))} emptyText="Nenhum profissional avaliado ainda." />
+          <SectionCard title="Profissionais mais bem avaliados">
+            <RankingTable rows={bestProfessionals.map((professional) => ({ id: professional.professional_id, name: professional.professional_name, subtitle: `${professional.position || 'Cargo não informado'} · ${professional.health_unit_name || 'Unidade não informada'} · ${formatInteger(professional.total_evaluations)} avaliações`, score: professional.avg_professional_score }))} emptyText="Nenhuma avaliação registrada." />
           </SectionCard>
-          <SectionCard title="Profissionais com menor média" description="Ajuda a identificar pontos de treinamento e melhoria.">
-            <RankingTable rows={worstProfessionals.map((professional) => ({ id: professional.professional_id, name: professional.professional_name, subtitle: `${professional.position || 'Cargo não informado'} · ${professional.health_unit_name || 'Unidade não informada'} · ${formatInteger(professional.total_evaluations)} avaliações`, score: professional.avg_professional_score }))} emptyText="Nenhum profissional avaliado ainda." />
+          <SectionCard title="Profissionais com menor média">
+            <RankingTable rows={worstProfessionals.map((professional) => ({ id: professional.professional_id, name: professional.professional_name, subtitle: `${professional.position || 'Cargo não informado'} · ${professional.health_unit_name || 'Unidade não informada'} · ${formatInteger(professional.total_evaluations)} avaliações`, score: professional.avg_professional_score }))} emptyText="Nenhuma avaliação registrada." />
           </SectionCard>
         </div>
       </>
     );
   } catch {
-    return <EmptyState title="Ranking indisponível" description="Não foi possível carregar o ranking. Confira a configuração do Supabase e tente novamente." />;
+    return <EmptyState title="Não foi possível carregar os dados." />;
   }
 }
 
 function RankingTable({ rows, emptyText }: { rows: RankingRow[]; emptyText: string }) {
   if (!rows.length) {
-    return <EmptyState title="Sem dados para ranking" description={emptyText} />;
+    return <EmptyState title={emptyText} />;
   }
 
   return (

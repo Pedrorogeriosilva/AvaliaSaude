@@ -52,3 +52,19 @@ export function labelManifestation(value: string | null | undefined) {
   };
   return value ? map[value] ?? value : '-';
 }
+
+export function maskCpf(value: string | null | undefined) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '-';
+  if (digits.length < 4) return '***';
+  return `***.***.***-${digits.slice(-2)}`;
+}
+
+export function obfuscatePatientName(value: string | null | undefined) {
+  const fullName = String(value || '').trim();
+  if (!fullName) return 'Paciente não identificado';
+
+  const [firstName, ...rest] = fullName.split(/\s+/);
+  const initial = rest[0]?.[0] ? ` ${rest[0][0]}.` : '';
+  return `${firstName}${initial}`;
+}

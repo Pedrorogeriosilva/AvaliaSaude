@@ -8,7 +8,7 @@ const MonthlyChart = dynamic(
   () => import('@/components/dashboard/monthly-chart').then((mod) => mod.MonthlyChart),
   {
     ssr: false,
-    loading: () => <ChartPlaceholder emptyMessage="Carregando gráfico mensal..." />,
+    loading: () => <ChartPlaceholder emptyMessage="Carregando..." />,
   },
 );
 

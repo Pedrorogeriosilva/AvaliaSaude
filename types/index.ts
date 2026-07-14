@@ -44,11 +44,16 @@ export type UnitMetric = {
   health_unit_id: string;
   health_unit_name: string;
   health_unit_type: HealthUnitType;
+  health_unit_status?: RecordStatus;
   total_evaluations: number | string | null;
   avg_general_score: number | string | null;
   avg_satisfaction_score: number | string | null;
+  avg_structure_score?: number | string | null;
+  avg_clarity_score?: number | string | null;
+  avg_service_quality_score?: number | string | null;
   resolution_rate: number | string | null;
   avg_wait_time_minutes: number | string | null;
+  last_evaluation_date?: string | null;
 };
 
 export type CityMonthlyMetric = {
@@ -72,9 +77,13 @@ export type ProfessionalMetric = {
   professional_id: string;
   professional_name: string;
   position: string;
+  health_unit_id?: string;
   health_unit_name: string;
+  professional_status?: RecordStatus;
+  health_unit_status?: RecordStatus;
   total_evaluations: number | string | null;
   avg_professional_score: number | string | null;
+  last_evaluation_date?: string | null;
 };
 
 export type Profile = {

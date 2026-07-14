@@ -8,7 +8,7 @@ const UnitBarChart = dynamic(
   () => import('@/components/dashboard/unit-bar-chart').then((mod) => mod.UnitBarChart),
   {
     ssr: false,
-    loading: () => <ChartPlaceholder emptyMessage="Carregando gráfico por unidade..." />,
+    loading: () => <ChartPlaceholder emptyMessage="Carregando..." />,
   },
 );
 

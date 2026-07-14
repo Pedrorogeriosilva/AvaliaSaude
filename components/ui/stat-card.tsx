@@ -5,7 +5,7 @@ export function StatCard({ label, value, hint }: Props) {
     <article className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="text-sm font-semibold text-slate-500">{label}</div>
       <div className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</div>
-      {hint ? <div className="mt-2 text-xs leading-5 text-slate-500">{hint}</div> : null}
+      {hint ? <div className="mt-2 text-xs font-medium text-slate-500">{hint}</div> : null}
     </article>
   );
 }

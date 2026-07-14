@@ -3,7 +3,11 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Avalia Saúde - Porto Alegre do Norte',
-  description: 'Sistema municipal de avaliação das unidades de saúde.',
+  description: 'Avalia Saúde.',
+  robots: {
+    index: false,
+    follow: false,
+  },
   icons: {
     icon: '/brand/favicon.ico',
     shortcut: '/brand/favicon.ico',

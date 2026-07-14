@@ -10,9 +10,9 @@ type Props = {
 
 const sizeMap = {
   horizontal: {
-    sm: { width: 150, height: 43 },
-    md: { width: 220, height: 64 },
-    lg: { width: 340, height: 98 },
+    sm: { width: 150, height: 71 },
+    md: { width: 220, height: 104 },
+    lg: { width: 300, height: 142 },
   },
   symbol: {
     sm: { width: 36, height: 36 },
@@ -28,7 +28,7 @@ export function SiteLogo({ className, priority = false, size = 'md', variant = '
   return (
     <Image
       src={src}
-      alt="Avalia Saúde - Porto Alegre do Norte"
+      alt="Avalia Saúde"
       width={dimensions.width}
       height={dimensions.height}
       priority={priority}

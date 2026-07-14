@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 
 export type NavItem = {
@@ -15,12 +15,7 @@ type Props = {
 };
 
 export function MainNav({ items, variant = 'desktop' }: Props) {
-  const pathname = usePathname();
-  const router = useRouter();
-
-  function warmRoute(href: string) {
-    router.prefetch(href);
-  }
+  const pathname = usePathname() || '';
 
   if (variant === 'mobile') {
     return (
@@ -33,8 +28,6 @@ export function MainNav({ items, variant = 'desktop' }: Props) {
               href={item.href}
               prefetch={false}
               aria-current={active ? 'page' : undefined}
-              onMouseEnter={() => warmRoute(item.href)}
-              onFocus={() => warmRoute(item.href)}
               className={clsx(
                 'rounded-lg px-2 py-2 text-center text-xs font-semibold transition',
                 active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-700',
@@ -58,8 +51,6 @@ export function MainNav({ items, variant = 'desktop' }: Props) {
             href={item.href}
             prefetch={false}
             aria-current={active ? 'page' : undefined}
-            onMouseEnter={() => warmRoute(item.href)}
-            onFocus={() => warmRoute(item.href)}
             className={clsx(
               'rounded-lg px-3 py-2 text-sm font-semibold transition',
               active ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:bg-white hover:text-blue-700',
