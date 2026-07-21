@@ -1,7 +1,8 @@
 import 'server-only';
 
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { cookies } from 'next/headers';
+import { clearFailures, peekRateLimit, registerFailure, type RateLimitOptions } from '@/lib/rate-limit';
 
 const ADMIN_USERS_GATE_COOKIE = 'avalia_admin_users_gate';
 const ADMIN_USERS_GATE_ATTEMPTS_COOKIE = 'avalia_admin_users_gate_attempts';
@@ -9,6 +10,16 @@ const ADMIN_USERS_GATE_MAX_AGE = 20 * 60;
 const ADMIN_USERS_GATE_ATTEMPT_WINDOW = 10 * 60;
 const ADMIN_USERS_GATE_ATTEMPT_LIMIT = 5;
 const ADMIN_USERS_GATE_LOCK_SECONDS = 10 * 60;
+
+const GATE_RATE_LIMIT: RateLimitOptions = {
+  limit: ADMIN_USERS_GATE_ATTEMPT_LIMIT,
+  windowSeconds: ADMIN_USERS_GATE_ATTEMPT_WINDOW,
+  blockSeconds: ADMIN_USERS_GATE_LOCK_SECONDS,
+};
+
+function gateRateLimitKey(profileId: string) {
+  return `admin-gate:${profileId}`;
+}
 
 type AttemptState = {
   count: number;
@@ -41,6 +52,17 @@ function safeEquals(left: string, right: string) {
   const rightBuffer = Buffer.from(right);
   if (leftBuffer.length !== rightBuffer.length) return false;
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+/**
+ * Compara segredos em tempo constante. O hash intermediário garante buffers do
+ * mesmo tamanho, então nem o conteúdo nem o comprimento da senha vazam pelo
+ * tempo de resposta.
+ */
+function safeEqualsSecret(left: string, right: string) {
+  const leftDigest = createHash('sha256').update(left, 'utf8').digest();
+  const rightDigest = createHash('sha256').update(right, 'utf8').digest();
+  return timingSafeEqual(leftDigest, rightDigest);
 }
 
 function decodeSignedPayload(rawValue: string | undefined | null) {
@@ -98,7 +120,7 @@ export function validateAdminCreationPasswordValue(value: FormDataEntryValue | n
     return `Informe a senha adicional de administrador para ${purpose}.`;
   }
 
-  if (providedPassword !== configuredPassword) {
+  if (!safeEqualsSecret(providedPassword, configuredPassword)) {
     return 'Senha adicional de administrador inválida.';
   }
 
@@ -144,16 +166,33 @@ export async function lockUserManagementGate() {
   cookieStore.delete(ADMIN_USERS_GATE_COOKIE);
 }
 
-export async function getUserManagementUnlockCooldown() {
+/**
+ * O bloqueio é avaliado em duas camadas e vale a mais restritiva:
+ *
+ * 1. Contador em memória do servidor, que o visitante não consegue apagar.
+ * 2. Cookie assinado, que sobrevive a cold start e troca de instância.
+ *
+ * Sozinho o cookie não protegia nada: bastava apagá-lo para zerar o bloqueio.
+ */
+export async function getUserManagementUnlockCooldown(profileId?: string | null) {
+  const serverCooldown = profileId ? peekRateLimit(gateRateLimitKey(profileId)).retryAfterSeconds : 0;
+
   const cookieStore = await cookies();
   const payload = decodeSignedPayload(cookieStore.get(ADMIN_USERS_GATE_ATTEMPTS_COOKIE)?.value);
   const state = parseAttemptState(payload);
-  if (!state || state.blockedUntil === null) return 0;
-  if (Date.now() >= state.blockedUntil) return 0;
-  return Math.ceil((state.blockedUntil - Date.now()) / 1000);
+  const cookieCooldown =
+    !state || state.blockedUntil === null || Date.now() >= state.blockedUntil
+      ? 0
+      : Math.ceil((state.blockedUntil - Date.now()) / 1000);
+
+  return Math.max(serverCooldown, cookieCooldown);
 }
 
-export async function registerUserManagementGateFailure() {
+export async function registerUserManagementGateFailure(profileId?: string | null) {
+  if (profileId) {
+    registerFailure(gateRateLimitKey(profileId), GATE_RATE_LIMIT);
+  }
+
   const cookieStore = await cookies();
   const payload = decodeSignedPayload(cookieStore.get(ADMIN_USERS_GATE_ATTEMPTS_COOKIE)?.value);
   const currentState = parseAttemptState(payload);
@@ -190,7 +229,11 @@ export async function registerUserManagementGateFailure() {
   });
 }
 
-export async function clearUserManagementGateFailures() {
+export async function clearUserManagementGateFailures(profileId?: string | null) {
+  if (profileId) {
+    clearFailures(gateRateLimitKey(profileId));
+  }
+
   const cookieStore = await cookies();
   cookieStore.delete(ADMIN_USERS_GATE_ATTEMPTS_COOKIE);
 }

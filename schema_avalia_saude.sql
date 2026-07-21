@@ -260,7 +260,8 @@ create index if not exists idx_evaluation_professionals_professional_id on publi
 -- 7. VIEWS PARA DASHBOARD E RANKING
 -- ============================================================
 
-create or replace view public.v_city_monthly_metrics as
+create or replace view public.v_city_monthly_metrics
+with (security_invoker = true) as
 select
   date_trunc('month', attendance_date)::date as month,
   count(*)::integer as total_evaluations,
@@ -278,7 +279,8 @@ order by month;
 
 comment on view public.v_city_monthly_metrics is 'Indicadores mensais consolidados da cidade.';
 
-create or replace view public.v_unit_metrics as
+create or replace view public.v_unit_metrics
+with (security_invoker = true) as
 select
   hu.id as health_unit_id,
   hu.name as health_unit_name,
@@ -302,7 +304,8 @@ group by hu.id, hu.name, hu.type, hu.status;
 
 comment on view public.v_unit_metrics is 'Indicadores consolidados por unidade de saúde.';
 
-create or replace view public.v_unit_monthly_metrics as
+create or replace view public.v_unit_monthly_metrics
+with (security_invoker = true) as
 select
   hu.id as health_unit_id,
   hu.name as health_unit_name,
@@ -323,7 +326,8 @@ order by month, hu.name;
 
 comment on view public.v_unit_monthly_metrics is 'Evolução mensal dos indicadores por unidade.';
 
-create or replace view public.v_professional_metrics as
+create or replace view public.v_professional_metrics
+with (security_invoker = true) as
 select
   p.id as professional_id,
   p.full_name as professional_name,

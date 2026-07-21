@@ -9,6 +9,7 @@ import { labelUnitType } from '@/lib/format';
 import { DEFAULT_PAGE_SIZE, getPage, getRange } from '@/lib/pagination';
 import { getFriendlyErrorMessage, getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
+import { buildSearchPattern } from '@/lib/validation';
 import { createHealthUnitAction, deleteHealthUnitAction, updateHealthUnitAction } from '../actions';
 
 type Props = { searchParams?: Promise<{ q?: string; page?: string; error?: string; success?: string }> };
@@ -27,13 +28,14 @@ type UnitRow = {
 export default async function UnidadesPage({ searchParams }: Props) {
   const params = searchParams ? await searchParams : {};
   const query = params.q?.trim() || '';
+  const searchPattern = buildSearchPattern(query);
   const page = getPage(params.page);
   const { from, to } = getRange(page);
 
   try {
     const supabase = await createClient();
     let request = supabase.from('health_units').select('id, name, type, address, neighborhood, phone, manager_name, status').order('name').range(from, to);
-    if (query) request = request.ilike('name', `%${query}%`);
+    if (searchPattern) request = request.ilike('name', searchPattern);
     const [{ data: units, error }, currentProfile] = await Promise.all([request, getCurrentProfile()]);
     const isAdmin = currentProfile?.role === 'admin';
 

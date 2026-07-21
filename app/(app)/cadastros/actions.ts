@@ -626,7 +626,7 @@ export async function unlockUserManagementAction(formData: FormData) {
 
   try {
     const currentAdmin = await assertCanManageUsers();
-    const cooldownSeconds = await getUserManagementUnlockCooldown();
+    const cooldownSeconds = await getUserManagementUnlockCooldown(currentAdmin.id);
     if (cooldownSeconds > 0) {
       throw new Error(`Muitas tentativas na senha adicional. Aguarde ${cooldownSeconds} segundos e tente novamente.`);
     }
@@ -637,9 +637,9 @@ export async function unlockUserManagementAction(formData: FormData) {
     );
 
     if (errorMessage) {
-      await registerUserManagementGateFailure();
+      await registerUserManagementGateFailure(currentAdmin.id);
     } else {
-      await clearUserManagementGateFailures();
+      await clearUserManagementGateFailures(currentAdmin.id);
       await unlockUserManagementGate(currentAdmin.id);
     }
   } catch (error) {

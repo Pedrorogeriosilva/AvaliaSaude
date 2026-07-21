@@ -90,3 +90,22 @@ export function isValidEnum<T extends string>(value: string, options: readonly T
 export function normalizeSearchQuery(value: string | undefined, maxLength = 80) {
   return String(value || '').trim().slice(0, maxLength);
 }
+
+/**
+ * Neutraliza os curingas de LIKE/ILIKE (`%`, `_`) e os caracteres que o
+ * PostgREST usa para delimitar filtros (`,`, `.`, `(`, `)`, `*`, aspas).
+ * Sem isso, buscar por `%` lista a base inteira e um `,` pode alterar o
+ * significado do filtro enviado à API.
+ */
+export function escapeLikePattern(value: string) {
+  return value
+    .replace(/[\\%_]/g, (character) => `\\${character}`)
+    .replace(/[,()*"']/g, ' ')
+    .trim();
+}
+
+/** Termo já normalizado e seguro para interpolar em um filtro `ilike`. */
+export function buildSearchPattern(value: string | undefined, maxLength = 80) {
+  const escaped = escapeLikePattern(normalizeSearchQuery(value, maxLength));
+  return escaped ? `%${escaped}%` : null;
+}

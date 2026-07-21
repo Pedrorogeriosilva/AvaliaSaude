@@ -4,7 +4,7 @@ import { cache } from 'react';
 import { maskCpf, obfuscatePatientName } from '@/lib/format';
 import { measureAsync } from '@/lib/performance';
 import { createClient } from '@/lib/supabase/server';
-import { normalizeSearchQuery } from '@/lib/validation';
+import { buildSearchPattern, normalizeSearchQuery } from '@/lib/validation';
 import type {
   CityMonthlyMetric,
   EvaluationNote,
@@ -66,8 +66,7 @@ export type RankingData = {
 };
 
 const RECENT_NOTES_LIMIT = 8;
-const RECENT_NOTES_PAGE_SIZE = 24;
-const RECENT_NOTES_MAX_PAGES = 5;
+const RECENT_NOTES_FETCH_LIMIT = 24;
 
 type EvaluationNoteQueryRow = {
   id: string;
@@ -82,33 +81,6 @@ type EvaluationNoteQueryRow = {
 
 type ProfessionalFormRow = Pick<Professional, 'id' | 'full_name' | 'position' | 'health_unit_id' | 'work_schedule'> & {
   health_units?: { status?: string | null } | { status?: string | null }[] | null;
-};
-
-type ProfessionalQueryRow = {
-  id: string;
-  full_name: string;
-  position: string;
-  health_unit_id: string;
-  status: string;
-  health_units?: { id: string; name: string; status?: string | null } | { id: string; name: string; status?: string | null }[] | null;
-};
-
-type EvaluationProfessionalRow = {
-  professional_id: string;
-  score: number | string | null;
-  evaluations?: {
-    id: string;
-    attendance_date: string;
-    patient_id: string;
-    health_unit_id: string;
-    created_by: string | null;
-  } | {
-    id: string;
-    attendance_date: string;
-    patient_id: string;
-    health_unit_id: string;
-    created_by: string | null;
-  }[] | null;
 };
 
 function normalizeError(error: unknown): QueryError {
@@ -202,123 +174,34 @@ const fetchMonthlyMetrics = cache(async (): Promise<DashboardSectionResult<CityM
   }),
 );
 
+/**
+ * A view `v_professional_metrics` já agrega as notas e descarta avaliações de
+ * paciente, unidade ou autor inativo. Antes isso era refeito aqui em JS, o que
+ * exigia baixar todas as linhas de `evaluation_professionals` do município e
+ * mais três consultas de apoio a cada carregamento do painel.
+ */
 const fetchProfessionalMetrics = cache(async (): Promise<DashboardSectionResult<ProfessionalMetric[]>> =>
   withReadClient('getDashboardProfessionalsData', async (supabase) => {
     try {
-      const { data: professionalRows, error: professionalError } = await supabase
-        .from('professionals')
-        .select('id, full_name, position, status, health_unit_id, health_units!inner(id, name, status)')
-        .eq('status', 'active')
-        .eq('health_units.status', 'active')
-        .order('full_name');
+      const { data, error } = await supabase
+        .from('v_professional_metrics')
+        .select('professional_id, professional_name, position, health_unit_id, health_unit_name, professional_status, health_unit_status, total_evaluations, avg_professional_score, last_evaluation_date')
+        .eq('professional_status', 'active')
+        .eq('health_unit_status', 'active')
+        .gt('total_evaluations', 0)
+        .order('avg_professional_score', { ascending: false, nullsFirst: false })
+        .limit(200);
 
-      if (professionalError) {
-        return { data: [], error: normalizeError(professionalError) };
+      if (error) {
+        return { data: [], error: normalizeError(error) };
       }
 
-      const activeProfessionals = ((professionalRows || []) as ProfessionalQueryRow[])
-        .map((professional) => ({
-          ...professional,
-          health_unit: asSingle(professional.health_units),
-        }))
-        .filter((professional) => professional.health_unit?.id && professional.health_unit?.name);
-
-      if (!activeProfessionals.length) {
-        return { data: [], error: null };
-      }
-
-      const professionalIds = activeProfessionals.map((professional) => professional.id);
-
-      const { data: evaluationProfessionalRows, error: evaluationProfessionalError } = await supabase
-        .from('evaluation_professionals')
-        .select('professional_id, score, evaluations!inner(id, attendance_date, patient_id, health_unit_id, created_by)')
-        .in('professional_id', professionalIds);
-
-      if (evaluationProfessionalError) {
-        return { data: [], error: normalizeError(evaluationProfessionalError) };
-      }
-
-      const evaluationRows = ((evaluationProfessionalRows || []) as EvaluationProfessionalRow[])
-        .map((row) => ({
-          professional_id: row.professional_id,
-          score: safeNumber(row.score),
-          evaluation: asSingle(row.evaluations),
-        }))
-        .filter((row) => row.evaluation?.id);
-
-      if (!evaluationRows.length) {
-        return { data: [], error: null };
-      }
-
-      const patientIds = Array.from(new Set(evaluationRows.map((row) => row.evaluation?.patient_id).filter(Boolean))) as string[];
-      const healthUnitIds = Array.from(new Set(evaluationRows.map((row) => row.evaluation?.health_unit_id).filter(Boolean))) as string[];
-      const profileIds = Array.from(new Set(evaluationRows.map((row) => row.evaluation?.created_by).filter(Boolean))) as string[];
-
-      const [patientsResult, unitsResult, profilesResult] = await Promise.all([
-        patientIds.length
-          ? supabase.from('patients').select('id').eq('status', 'active').in('id', patientIds)
-          : Promise.resolve({ data: [], error: null }),
-        healthUnitIds.length
-          ? supabase.from('health_units').select('id').eq('status', 'active').in('id', healthUnitIds)
-          : Promise.resolve({ data: [], error: null }),
-        profileIds.length
-          ? supabase.from('profiles').select('id').eq('status', 'active').in('id', profileIds)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
-
-      const relationError = firstError([patientsResult, unitsResult, profilesResult] as QueryResult<unknown>[]);
-      if (relationError) {
-        return { data: [], error: relationError };
-      }
-
-      const activePatients = new Set((patientsResult.data || []).map((patient) => patient.id));
-      const activeUnits = new Set((unitsResult.data || []).map((unit) => unit.id));
-      const activeProfiles = new Set((profilesResult.data || []).map((profile) => profile.id));
-      const professionalMap = new Map(activeProfessionals.map((professional) => [professional.id, professional]));
-      const aggregates = new Map<string, { total: number; sum: number; lastEvaluationDate: string | null }>();
-
-      for (const row of evaluationRows) {
-        const evaluation = row.evaluation;
-        if (!evaluation) continue;
-
-        const professional = professionalMap.get(row.professional_id);
-        if (!professional) continue;
-        if (!activePatients.has(evaluation.patient_id)) continue;
-        if (!activeUnits.has(evaluation.health_unit_id)) continue;
-        if (evaluation.created_by && !activeProfiles.has(evaluation.created_by)) continue;
-
-        const current = aggregates.get(row.professional_id) || { total: 0, sum: 0, lastEvaluationDate: null };
-        current.total += 1;
-        current.sum += row.score;
-        current.lastEvaluationDate =
-          !current.lastEvaluationDate || evaluation.attendance_date > current.lastEvaluationDate
-            ? evaluation.attendance_date
-            : current.lastEvaluationDate;
-        aggregates.set(row.professional_id, current);
-      }
-
-      const professionals = activeProfessionals.reduce<ProfessionalMetric[]>((result, professional) => {
-        const aggregate = aggregates.get(professional.id);
-
-        if (!aggregate || aggregate.total <= 0) {
-          return result;
-        }
-
-        result.push({
-          professional_id: professional.id,
-          professional_name: professional.full_name,
-          position: professional.position,
-          health_unit_id: professional.health_unit_id,
-          health_unit_name: professional.health_unit?.name || 'Unidade nao informada',
-          professional_status: 'active',
-          health_unit_status: 'active',
-          total_evaluations: aggregate.total,
-          avg_professional_score: Number((aggregate.sum / aggregate.total).toFixed(2)),
-          last_evaluation_date: aggregate.lastEvaluationDate,
-        });
-
-        return result;
-      }, []);
+      const professionals = ((data || []) as ProfessionalMetric[]).map((professional) => ({
+        ...professional,
+        health_unit_name: professional.health_unit_name || 'Unidade nao informada',
+        avg_professional_score: safeNumber(professional.avg_professional_score),
+        total_evaluations: safeNumber(professional.total_evaluations),
+      }));
 
       professionals.sort((left, right) => {
         const scoreDifference = safeNumber(right.avg_professional_score) - safeNumber(left.avg_professional_score);
@@ -343,75 +226,56 @@ const fetchProfessionalMetrics = cache(async (): Promise<DashboardSectionResult<
 const fetchRecentNotes = cache(async (): Promise<DashboardSectionResult<EvaluationNote[]>> =>
   withReadClient('getDashboardNotesData', async (supabase) => {
     try {
+      // Uma única consulta com folga sobre o limite. Os joins `!inner` e o
+      // filtro de `general_notes` já acontecem no banco; a folga cobre apenas
+      // os comentários que são só espaço em branco e caem no filtro abaixo.
+      const { data, error } = await supabase
+        .from('evaluations')
+        .select(`
+          id,
+          attendance_date,
+          manifestation,
+          general_score,
+          general_notes,
+          created_at,
+          patients!inner(id, full_name, status),
+          health_units!inner(id, name, status)
+        `)
+        .not('general_notes', 'is', null)
+        .neq('general_notes', '')
+        .eq('patients.status', 'active')
+        .eq('health_units.status', 'active')
+        .order('created_at', { ascending: false })
+        .order('attendance_date', { ascending: false })
+        .limit(RECENT_NOTES_FETCH_LIMIT);
+
+      if (error) {
+        return { data: [], error: normalizeError(error) };
+      }
+
       const notes: EvaluationNote[] = [];
-      const seenIds = new Set<string>();
 
-      for (let page = 0; page < RECENT_NOTES_MAX_PAGES && notes.length < RECENT_NOTES_LIMIT; page += 1) {
-        const from = page * RECENT_NOTES_PAGE_SIZE;
-        const to = from + RECENT_NOTES_PAGE_SIZE - 1;
+      for (const row of (data || []) as EvaluationNoteQueryRow[]) {
+        if (notes.length >= RECENT_NOTES_LIMIT) break;
 
-        const { data, error } = await supabase
-          .from('evaluations')
-          .select(`
-            id,
-            attendance_date,
-            manifestation,
-            general_score,
-            general_notes,
-            created_at,
-            patients!inner(id, full_name, status),
-            health_units!inner(id, name, status)
-          `)
-          .not('general_notes', 'is', null)
-          .eq('patients.status', 'active')
-          .eq('health_units.status', 'active')
-          .order('created_at', { ascending: false })
-          .order('attendance_date', { ascending: false })
-          .range(from, to);
+        const patient = asSingle(row.patients);
+        const healthUnit = asSingle(row.health_units);
+        const generalNotes = row.general_notes?.trim() || '';
 
-        if (error) {
-          return { data: [], error: normalizeError(error) };
+        if (!generalNotes || !patient?.full_name || !healthUnit?.name) {
+          continue;
         }
 
-        const rows = (data || []) as EvaluationNoteQueryRow[];
-
-        if (!rows.length) {
-          break;
-        }
-
-        for (const row of rows) {
-          if (seenIds.has(row.id)) {
-            continue;
-          }
-
-          const patient = asSingle(row.patients);
-          const healthUnit = asSingle(row.health_units);
-          const generalNotes = row.general_notes?.trim() || '';
-
-          if (!generalNotes || !patient?.id || !patient.full_name || !healthUnit?.id || !healthUnit.name) {
-            continue;
-          }
-
-          seenIds.add(row.id);
-          notes.push({
-            id: row.id,
-            attendance_date: row.attendance_date,
-            manifestation: row.manifestation,
-            general_score: row.general_score,
-            general_notes: generalNotes,
-            patient_name: obfuscatePatientName(patient.full_name),
-            health_unit_name: healthUnit.name,
-            created_at: row.created_at,
-          });
-
-          if (notes.length >= RECENT_NOTES_LIMIT) {
-            break;
-          }
-        }
-
-        if (rows.length < RECENT_NOTES_PAGE_SIZE) {
-          break;
-        }
+        notes.push({
+          id: row.id,
+          attendance_date: row.attendance_date,
+          manifestation: row.manifestation,
+          general_score: row.general_score,
+          general_notes: generalNotes,
+          patient_name: obfuscatePatientName(patient.full_name),
+          health_unit_name: healthUnit.name,
+          created_at: row.created_at,
+        });
       }
 
       return {
@@ -518,6 +382,9 @@ export async function searchPatients(search: string) {
   const normalized = normalizeSearchQuery(search);
   if (normalized.length < 2) return [];
 
+  const namePattern = buildSearchPattern(normalized);
+  if (!namePattern) return [];
+
   return withReadClient('searchPatients', async (supabase) => {
     const digits = normalized.replace(/\D/g, '');
 
@@ -526,7 +393,7 @@ export async function searchPatients(search: string) {
         .from('patients')
         .select('id, full_name, cpf')
         .eq('status', 'active')
-        .ilike('full_name', `%${normalized}%`)
+        .ilike('full_name', namePattern)
         .order('full_name')
         .limit(8),
       digits.length >= 3

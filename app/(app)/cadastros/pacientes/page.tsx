@@ -9,6 +9,7 @@ import { formatDate, maskCpf } from '@/lib/format';
 import { DEFAULT_PAGE_SIZE, getPage, getRange } from '@/lib/pagination';
 import { getFriendlyErrorMessage, getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
+import { buildSearchPattern } from '@/lib/validation';
 import { createPatientAction, deletePatientAction, updatePatientAction } from '../actions';
 
 type Props = { searchParams?: Promise<{ q?: string; page?: string; error?: string; success?: string }> };
@@ -29,6 +30,7 @@ type PatientRow = {
 export default async function PacientesPage({ searchParams }: Props) {
   const params = searchParams ? await searchParams : {};
   const query = params.q?.trim() || '';
+  const searchPattern = buildSearchPattern(query);
   const page = getPage(params.page);
   const { from, to } = getRange(page);
 
@@ -40,7 +42,7 @@ export default async function PacientesPage({ searchParams }: Props) {
       .order('created_at', { ascending: false })
       .range(from, to);
 
-    if (query) request = request.ilike('full_name', `%${query}%`);
+    if (searchPattern) request = request.ilike('full_name', searchPattern);
 
     const [{ data: patients, error }, currentProfile] = await Promise.all([request, getCurrentProfile()]);
     const canEdit = currentProfile?.role === 'admin' || currentProfile?.role === 'operator';

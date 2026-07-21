@@ -8,6 +8,7 @@ import { getCurrentProfile } from '@/lib/auth';
 import { DEFAULT_PAGE_SIZE, getPage, getRange } from '@/lib/pagination';
 import { getFriendlyErrorMessage, getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
+import { buildSearchPattern } from '@/lib/validation';
 import { createProfessionalAction, deleteProfessionalAction, updateProfessionalAction } from '../actions';
 
 type Props = { searchParams?: Promise<{ q?: string; page?: string; error?: string; success?: string }> };
@@ -49,6 +50,7 @@ function normalizeProfessional(row: ProfessionalRawRow): ProfessionalRow {
 export default async function ProfissionaisPage({ searchParams }: Props) {
   const params = searchParams ? await searchParams : {};
   const query = params.q?.trim() || '';
+  const searchPattern = buildSearchPattern(query);
   const page = getPage(params.page);
   const { from, to } = getRange(page);
 
@@ -60,7 +62,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
       .order('full_name')
       .range(from, to);
 
-    if (query) professionalsRequest = professionalsRequest.ilike('full_name', `%${query}%`);
+    if (searchPattern) professionalsRequest = professionalsRequest.ilike('full_name', searchPattern);
 
     const [currentProfile, { data: units, error: unitsError }, { data: professionals, error: professionalsError }] = await Promise.all([
       getCurrentProfile(),

@@ -29,6 +29,9 @@ type EvaluationProfessionalInsert = {
 
 const INACTIVE_RECORD_MESSAGE = 'Não é possível registrar avaliação com paciente, unidade, profissional ou usuário inativo.';
 
+/** Teto defensivo: o formulário nunca envia tantos, mas a requisição é do cliente. */
+const MAX_PROFESSIONALS_PER_EVALUATION = 30;
+
 function errorTarget(message: string) {
   return `/avalie?error=${encodeURIComponent(getFriendlyErrorMessage(message))}`;
 }
@@ -132,7 +135,9 @@ export async function createEvaluationAction(formData: FormData) {
     const resolution = cleanText(formData.get('resolution'), 20) || 'partial';
     const manifestation = cleanText(formData.get('manifestation'), 20) || 'neutral';
     const generalNotes = optionalText(formData.get('general_notes'), 2000);
-    const professionalIds = formData.getAll('professional_ids').map(String).filter(Boolean);
+    const professionalIds = Array.from(
+      new Set(formData.getAll('professional_ids').map(String).filter(Boolean)),
+    ).filter(isValidUuid);
 
     const payload = {
       patient_id: await resolvePatientId(supabase, formData, currentProfile.id),
@@ -153,6 +158,8 @@ export async function createEvaluationAction(formData: FormData) {
 
     if (!isValidUuid(payload.health_unit_id)) {
       target = errorTarget('Selecione uma unidade válida.');
+    } else if (professionalIds.length > MAX_PROFESSIONALS_PER_EVALUATION) {
+      target = errorTarget(`Selecione no máximo ${MAX_PROFESSIONALS_PER_EVALUATION} profissionais por avaliação.`);
     } else if (!isValidDate(payload.attendance_date)) {
       target = errorTarget('Informe uma data de atendimento válida.');
     } else if (isFutureDate(payload.attendance_date)) {
