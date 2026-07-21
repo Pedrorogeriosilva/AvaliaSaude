@@ -1,7 +1,7 @@
 -- ============================================================
 -- Views com RLS aplicada + índices de performance
 -- Execute este arquivo no SQL Editor do Supabase.
--- Script idempotente, seguro e não destrutivo.
+-- Script idempotente: pode rodar quantas vezes quiser.
 -- ============================================================
 --
 -- O que este script resolve:
@@ -22,7 +22,30 @@
 --    booleano — sem expor nenhum dado de perfil.
 --
 -- 3. PERFORMANCE — índices para as consultas do painel e das buscas por nome.
+--
+-- ------------------------------------------------------------
+-- Por que DROP VIEW e não apenas CREATE OR REPLACE:
+--
+-- `create or replace view` só aceita acrescentar colunas no fim. Ele recusa
+-- renomear, reordenar ou inserir coluna no meio, com o erro:
+--
+--   42P16: cannot change name of view column "..." to "..."
+--
+-- A view `v_professional_metrics` ganha `health_unit_status` no meio da lista,
+-- então precisa ser removida antes. Como bancos diferentes podem estar em
+-- versões diferentes das views, todas as quatro são recriadas do zero — assim o
+-- script roda igual, não importa qual migração foi aplicada antes.
+--
+-- O SQL Editor do Supabase executa o arquivo inteiro como uma única transação,
+-- então não existe janela em que a aplicação encontre a view ausente: ou tudo
+-- é aplicado, ou nada é.
 -- ============================================================
+
+-- No Supabase a extensão pg_trgm normalmente vive no schema `extensions`, e sem
+-- ele no search_path o `gin_trgm_ops` da seção 5 não é encontrado. Schema que
+-- não existe é simplesmente ignorado pelo Postgres, então a linha é segura em
+-- qualquer instalação.
+set search_path = public, extensions;
 
 -- ------------------------------------------------------------
 -- 1. Função auxiliar para checar o autor sem vazar perfis
@@ -47,13 +70,22 @@ $$;
 comment on function public.is_active_profile(uuid) is
   'Informa se o perfil está ativo sem expor a linha de public.profiles. Usado pelas views de métricas para não depender da RLS de profiles.';
 
-grant execute on function public.is_active_profile(uuid) to authenticated;
+-- ------------------------------------------------------------
+-- 2. Remove as versões anteriores das views
+-- ------------------------------------------------------------
+-- Sem CASCADE de propósito: nada no schema depende destas views, e o CASCADE
+-- poderia derrubar silenciosamente algo criado fora deste script.
+
+drop view if exists public.v_city_monthly_metrics;
+drop view if exists public.v_unit_metrics;
+drop view if exists public.v_unit_monthly_metrics;
+drop view if exists public.v_professional_metrics;
 
 -- ------------------------------------------------------------
--- 2. Views recriadas com security_invoker
+-- 3. Views recriadas com security_invoker
 -- ------------------------------------------------------------
 
-create or replace view public.v_city_monthly_metrics
+create view public.v_city_monthly_metrics
 with (security_invoker = true) as
 select
   date_trunc('month', e.attendance_date)::date as month,
@@ -74,12 +106,11 @@ join public.health_units hu
   on hu.id = e.health_unit_id
  and hu.status = 'active'
 where public.is_active_profile(e.created_by)
-group by date_trunc('month', e.attendance_date)
-order by month;
+group by date_trunc('month', e.attendance_date);
 
 comment on view public.v_city_monthly_metrics is 'Indicadores mensais consolidados da cidade.';
 
-create or replace view public.v_unit_metrics
+create view public.v_unit_metrics
 with (security_invoker = true) as
 select
   hu.id as health_unit_id,
@@ -113,7 +144,7 @@ group by hu.id, hu.name, hu.type, hu.status;
 
 comment on view public.v_unit_metrics is 'Indicadores consolidados por unidade de saúde.';
 
-create or replace view public.v_unit_monthly_metrics
+create view public.v_unit_monthly_metrics
 with (security_invoker = true) as
 select
   hu.id as health_unit_id,
@@ -136,14 +167,13 @@ join public.patients p
   on p.id = e.patient_id
  and p.status = 'active'
 where public.is_active_profile(e.created_by)
-group by hu.id, hu.name, date_trunc('month', e.attendance_date)
-order by month, hu.name;
+group by hu.id, hu.name, date_trunc('month', e.attendance_date);
 
 comment on view public.v_unit_monthly_metrics is 'Evolução mensal dos indicadores por unidade.';
 
--- Nota: `count(e.id)` (e não `count(ep.id)`) garante que uma linha de vínculo
--- sem avaliação correspondente não infle o total de avaliações.
-create or replace view public.v_professional_metrics
+-- `count(e.id)` (e não `count(ep.id)`) garante que uma linha de vínculo sem
+-- avaliação correspondente não infle o total de avaliações.
+create view public.v_professional_metrics
 with (security_invoker = true) as
 select
   p.id as professional_id,
@@ -181,21 +211,32 @@ group by p.id, p.full_name, p.position, p.health_unit_id, hu.name, p.status, hu.
 comment on view public.v_professional_metrics is 'Indicadores consolidados por profissional.';
 
 -- ------------------------------------------------------------
--- 3. Permissões: apenas usuários autenticados, nunca anônimos
+-- 4. Permissões: apenas usuários autenticados, nunca anônimos
 -- ------------------------------------------------------------
+-- Os papéis `anon` e `authenticated` são criados pelo Supabase. O bloco abaixo
+-- confere antes de usá-los para que o script não quebre em um Postgres comum.
 
-revoke all on public.v_city_monthly_metrics from anon;
-revoke all on public.v_unit_metrics from anon;
-revoke all on public.v_unit_monthly_metrics from anon;
-revoke all on public.v_professional_metrics from anon;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on public.v_city_monthly_metrics from anon;
+    revoke all on public.v_unit_metrics from anon;
+    revoke all on public.v_unit_monthly_metrics from anon;
+    revoke all on public.v_professional_metrics from anon;
+  end if;
 
-grant select on public.v_city_monthly_metrics to authenticated;
-grant select on public.v_unit_metrics to authenticated;
-grant select on public.v_unit_monthly_metrics to authenticated;
-grant select on public.v_professional_metrics to authenticated;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    grant select on public.v_city_monthly_metrics to authenticated;
+    grant select on public.v_unit_metrics to authenticated;
+    grant select on public.v_unit_monthly_metrics to authenticated;
+    grant select on public.v_professional_metrics to authenticated;
+    grant execute on function public.is_active_profile(uuid) to authenticated;
+  end if;
+end
+$$;
 
 -- ------------------------------------------------------------
--- 4. Índices de apoio
+-- 5. Índices de apoio
 -- ------------------------------------------------------------
 
 create extension if not exists pg_trgm;

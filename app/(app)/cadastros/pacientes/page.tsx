@@ -81,7 +81,7 @@ export default async function PacientesPage({ searchParams }: Props) {
           <SectionCard title="Pacientes cadastrados">
             <form className="mb-4 flex gap-2">
               <input name="q" defaultValue={query} placeholder="Buscar paciente" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-blue-600" />
-              <button className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50">Buscar</button>
+              <button className="shrink-0 rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50">Buscar</button>
             </form>
             <div className="space-y-4">
               {patientRows.map((patient) => (

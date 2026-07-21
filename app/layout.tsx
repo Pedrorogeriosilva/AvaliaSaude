@@ -1,5 +1,12 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+
+// Explícito de propósito: sem `maximumScale` nem `userScalable: false`, para
+// que ninguém fique impedido de ampliar a tela para conseguir ler.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: 'Avalia Saúde - Porto Alegre do Norte',

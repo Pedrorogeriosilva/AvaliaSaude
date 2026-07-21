@@ -49,14 +49,6 @@ export type EvaluationFormData = {
   error: QueryError;
 };
 
-export type DashboardData = {
-  units: UnitMetric[];
-  monthly: CityMonthlyMetric[];
-  highlightedProfessionals: ProfessionalMetric[];
-  notes: EvaluationNote[];
-  errors: DashboardSectionErrors;
-};
-
 export type RankingData = {
   bestUnits: UnitMetric[];
   worstUnits: UnitMetric[];
@@ -319,33 +311,6 @@ export const getDashboardNotesData = cache(async (): Promise<{ notes: Evaluation
   const result = await fetchRecentNotes();
   logDashboardError('notes', result.error);
   return { notes: result.data, error: result.error };
-});
-
-export const getDashboardData = cache(async (): Promise<DashboardData> => {
-  const [unitsResult, monthlyResult, professionalsResult, notesResult] = await Promise.all([
-    fetchUnitMetrics(),
-    fetchMonthlyMetrics(),
-    fetchProfessionalMetrics(),
-    fetchRecentNotes(),
-  ]);
-
-  logDashboardError('units', unitsResult.error);
-  logDashboardError('monthly', monthlyResult.error);
-  logDashboardError('professionals', professionalsResult.error);
-  logDashboardError('notes', notesResult.error);
-
-  return {
-    units: unitsResult.data,
-    monthly: monthlyResult.data,
-    highlightedProfessionals: professionalsResult.data.slice(0, 5),
-    notes: notesResult.data,
-    errors: {
-      units: unitsResult.error,
-      monthly: monthlyResult.error,
-      professionals: professionalsResult.error,
-      notes: notesResult.error,
-    },
-  };
 });
 
 export const getEvaluationFormData = cache(async (): Promise<EvaluationFormData> =>

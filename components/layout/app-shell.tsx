@@ -32,9 +32,9 @@ export function AppShell({ children, profile }: Props) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-          <Link href="/painel" className="shrink-0" prefetch={false} aria-label="Ir para o painel">
-            <SiteLogo size="md" priority className="w-[158px] md:w-[206px]" />
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 md:gap-4 md:px-6 md:py-3">
+          <Link href="/painel" className="shrink-0" aria-label="Ir para o painel">
+            <SiteLogo size="md" priority className="w-[124px] md:w-[206px]" />
           </Link>
 
           <MainNav items={navItems} />
@@ -52,7 +52,7 @@ export function AppShell({ children, profile }: Props) {
           </div>
         </div>
 
-        <div className="border-t border-slate-100 bg-white px-3 py-2 md:hidden">
+        <div className="border-t border-slate-100 bg-white px-2 pb-1.5 pt-1 md:hidden">
           <MainNav items={navItems} variant="mobile" />
         </div>
       </header>

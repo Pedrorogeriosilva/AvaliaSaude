@@ -26,11 +26,10 @@ export function MainNav({ items, variant = 'desktop' }: Props) {
             <Link
               key={item.href}
               href={item.href}
-              prefetch={false}
               aria-current={active ? 'page' : undefined}
               className={clsx(
-                'rounded-lg px-2 py-2 text-center text-xs font-semibold transition',
-                active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-700',
+                'flex min-h-11 items-center justify-center rounded-lg px-1 text-center text-[0.8125rem] font-semibold leading-tight transition',
+                active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 active:bg-slate-100',
               )}
             >
               {item.label}
@@ -49,10 +48,9 @@ export function MainNav({ items, variant = 'desktop' }: Props) {
           <Link
             key={item.href}
             href={item.href}
-            prefetch={false}
             aria-current={active ? 'page' : undefined}
             className={clsx(
-              'rounded-lg px-3 py-2 text-sm font-semibold transition',
+              'rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600',
               active ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:bg-white hover:text-blue-700',
             )}
           >

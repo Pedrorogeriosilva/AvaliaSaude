@@ -22,7 +22,7 @@ export default async function CadastrosPage() {
         {visibleCards.map((card) => {
           const Icon = card.icon;
           return (
-            <Link key={card.href} href={card.href} prefetch={false} className="rounded-xl border border-slate-200 bg-white p-6 transition hover:border-blue-300 hover:bg-slate-50">
+            <Link key={card.href} href={card.href} className="rounded-xl border border-slate-200 bg-white p-6 transition hover:border-blue-300 hover:bg-slate-50">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
                 <Icon size={24} />
               </div>

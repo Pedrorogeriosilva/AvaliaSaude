@@ -68,6 +68,47 @@ td {
   overflow-x: auto;
 }
 
+/*
+  Conforto de toque.
+
+  `pointer: coarse` pega celular e tablet sem afetar quem usa mouse, então o
+  desktop continua exatamente como está. O piso de 44px é a área mínima que
+  um dedo acerta com segurança (WCAG 2.5.8 e Human Interface Guidelines).
+  Antes disso, os controles do sistema ficavam entre 30 e 36px.
+
+  Caixas de seleção nativas têm ~13px e são o alvo mais difícil da tela —
+  especialmente a de confirmar exclusão, onde errar o toque tem custo.
+*/
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea,
+  button,
+  summary,
+  .touch-target {
+    min-height: 44px;
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+  }
+}
+
+/* Respeita quem pediu menos movimento no sistema operacional. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .gov-shadow {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }

@@ -556,7 +556,8 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h2 className="mb-4 text-base font-semibold text-slate-900">Notas gerais do atendimento</h2>
-        <div className="grid gap-4 md:grid-cols-5">
+        {/* Cinco campos empilhados um a um viravam uma coluna longa demais no celular. */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4">
           {generalScoreFields.map(([name, label]) => (
             <label key={name} className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">{label}</span>

@@ -1,4 +1,5 @@
 import { LockKeyhole } from 'lucide-react';
+import { PasswordField } from '@/components/ui/password-field';
 import { SiteLogo } from '@/components/ui/site-logo';
 import { getFriendlyErrorMessage } from '@/lib/supabase/errors';
 import { loginAction } from './actions';
@@ -33,13 +34,10 @@ export default async function LoginPage({ searchParams }: Props) {
         <form action={loginAction} className="space-y-4">
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-slate-700">E-mail</span>
-            <input className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-blue-600" type="email" name="email" required />
+            <input className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-blue-600" type="email" name="email" autoComplete="email" required />
           </label>
 
-          <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-slate-700">Senha</span>
-            <input className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-blue-600" type="password" name="password" required />
-          </label>
+          <PasswordField />
 
           <button className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800">Acessar</button>
         </form>
