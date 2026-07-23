@@ -9,6 +9,8 @@ import { formatDate, maskCpf } from '@/lib/format';
 import { DEFAULT_PAGE_SIZE, getPage, getRange } from '@/lib/pagination';
 import { getFriendlyErrorMessage, getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
+import { CitySelect } from '@/components/ui/city-select';
+import { getActiveCities } from '@/lib/app-data';
 import { buildSearchPattern } from '@/lib/validation';
 import { createPatientAction, deletePatientAction, updatePatientAction } from '../actions';
 
@@ -18,7 +20,6 @@ type PatientRow = {
   id: string;
   full_name: string;
   cpf: string | null;
-  birth_date: string | null;
   phone: string | null;
   whatsapp: string | null;
   address: string | null;
@@ -38,15 +39,17 @@ export default async function PacientesPage({ searchParams }: Props) {
     const supabase = await createClient();
     let request = supabase
       .from('patients')
-      .select('id, full_name, cpf, birth_date, phone, whatsapp, address, neighborhood, created_at, status')
+      .select('id, full_name, cpf, phone, whatsapp, address, neighborhood, created_at, status')
       .order('created_at', { ascending: false })
       .range(from, to);
 
     if (searchPattern) request = request.ilike('full_name', searchPattern);
 
     const [{ data: patients, error }, currentProfile] = await Promise.all([request, getCurrentProfile()]);
-    const canEdit = currentProfile?.role === 'admin' || currentProfile?.role === 'operator';
-    const canDelete = currentProfile?.role === 'admin';
+    const isMaster = Boolean(currentProfile?.is_master);
+    const canEdit = isMaster || currentProfile?.role === 'admin' || currentProfile?.role === 'operator';
+    const canDelete = isMaster || currentProfile?.role === 'admin';
+    const cities = isMaster ? await getActiveCities() : [];
 
     if (error) {
       return <EmptyState title="Não foi possível carregar os dados." description={getFriendlySupabaseError(error, 'Não foi possível carregar a listagem de pacientes.')} />;
@@ -64,9 +67,9 @@ export default async function PacientesPage({ searchParams }: Props) {
           <SectionCard title={canEdit ? 'Novo paciente' : 'Cadastro protegido'}>
             {canEdit ? (
               <form action={createPatientAction} className="space-y-3">
+                {isMaster ? <CitySelect cities={cities} /> : null}
                 <Input label="Nome completo" name="full_name" required />
                 <Input label="CPF" name="cpf" placeholder="Somente números" />
-                <Input label="Data de nascimento" name="birth_date" type="date" />
                 <Input label="Telefone" name="phone" />
                 <Input label="WhatsApp" name="whatsapp" />
                 <Input label="Endereço" name="address" />
@@ -102,7 +105,6 @@ export default async function PacientesPage({ searchParams }: Props) {
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                         <InlineInput label="Nome" name="full_name" defaultValue={patient.full_name} required />
                         <InlineInput label="CPF" name="cpf" defaultValue={patient.cpf || ''} placeholder="Somente números" />
-                        <InlineInput label="Nascimento" name="birth_date" type="date" defaultValue={patient.birth_date || ''} />
                         <label className="block">
                           <span className="mb-1 block text-xs font-semibold text-slate-500">Status</span>
                           <select name="status" defaultValue={patient.status || 'active'} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 outline-none focus:border-blue-600">

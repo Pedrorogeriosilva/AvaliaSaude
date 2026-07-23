@@ -9,6 +9,8 @@ import { labelUnitType } from '@/lib/format';
 import { DEFAULT_PAGE_SIZE, getPage, getRange } from '@/lib/pagination';
 import { getFriendlyErrorMessage, getFriendlySupabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
+import { CitySelect } from '@/components/ui/city-select';
+import { getActiveCities } from '@/lib/app-data';
 import { buildSearchPattern } from '@/lib/validation';
 import { createHealthUnitAction, deleteHealthUnitAction, updateHealthUnitAction } from '../actions';
 
@@ -37,7 +39,9 @@ export default async function UnidadesPage({ searchParams }: Props) {
     let request = supabase.from('health_units').select('id, name, type, address, neighborhood, phone, manager_name, status').order('name').range(from, to);
     if (searchPattern) request = request.ilike('name', searchPattern);
     const [{ data: units, error }, currentProfile] = await Promise.all([request, getCurrentProfile()]);
-    const isAdmin = currentProfile?.role === 'admin';
+    const isMaster = Boolean(currentProfile?.is_master);
+    const canManage = isMaster || currentProfile?.role === 'admin';
+    const cities = isMaster ? await getActiveCities() : [];
 
     if (error) {
       return <EmptyState title="Não foi possível carregar os dados." description={getFriendlySupabaseError(error, 'Não foi possível carregar a listagem de unidades.')} />;
@@ -52,9 +56,10 @@ export default async function UnidadesPage({ searchParams }: Props) {
         {params.success ? <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">{params.success}</div> : null}
         {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{getFriendlyErrorMessage(params.error)}</div> : null}
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-          <SectionCard title={isAdmin ? 'Nova unidade' : 'Cadastro protegido'}>
-            {isAdmin ? (
+          <SectionCard title={canManage ? 'Nova unidade' : 'Cadastro protegido'}>
+            {canManage ? (
               <form action={createHealthUnitAction} className="space-y-3">
+                {isMaster ? <CitySelect cities={cities} /> : null}
                 <Input label="Nome da unidade" name="name" required />
                 <UnitTypeSelect />
                 <Input label="Endereço" name="address" required />
@@ -86,7 +91,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
                     </div>
                   }
                 >
-                  {isAdmin ? (
+                  {canManage ? (
                     <>
                       <form action={updateHealthUnitAction} className="space-y-3">
                         <input type="hidden" name="id" value={unit.id} />

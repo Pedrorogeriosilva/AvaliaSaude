@@ -4,10 +4,12 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
   assertCanDeletePatients,
+  assertCanManageCities,
   assertCanManagePatients,
   assertCanManageProfessionals,
   assertCanManageUnits,
   assertCanManageUsers,
+  type CurrentProfile,
 } from '@/lib/auth';
 import {
   clearUserManagementGateFailures,
@@ -22,13 +24,13 @@ import { getFriendlyErrorMessage } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
 import {
   APP_ROLES,
+  BRAZIL_UFS,
   HEALTH_UNIT_TYPES,
   RECORD_STATUSES,
   assertMaxLength,
   cleanText,
   digitsOnly,
   isValidCpfFormat,
-  isValidDate,
   isValidEmail,
   isValidEnum,
   isValidUuid,
@@ -39,6 +41,30 @@ const PATIENTS_PATH = '/cadastros/pacientes';
 const UNITS_PATH = '/cadastros/unidades';
 const PROFESSIONALS_PATH = '/cadastros/profissionais';
 const USERS_PATH = '/cadastros/usuarios';
+const CITIES_PATH = '/cadastros/cidades';
+
+/**
+ * Decide a qual cidade um registro pertence.
+ *
+ * Segurança: um gestor NUNCA escolhe a cidade — o valor enviado no formulário é
+ * ignorado e usamos a cidade do próprio perfil. Só o master pode gravar em uma
+ * cidade específica, e mesmo assim precisa selecionar uma válida. Sem isto, um
+ * gestor poderia forjar `city_id` e escrever na cidade de outro município.
+ */
+function resolveCityId(profile: Exclude<CurrentProfile, null>, submittedCityId: string) {
+  if (!profile.is_master) {
+    if (!profile.city_id) {
+      throw new Error('Seu usuário não está vinculado a nenhuma cidade. Fale com o administrador master.');
+    }
+    return profile.city_id;
+  }
+
+  const cityId = cleanText(submittedCityId, 40);
+  if (!isValidUuid(cityId)) {
+    throw new Error('Selecione a cidade deste cadastro.');
+  }
+  return cityId;
+}
 
 function target(path: string, message: string) {
   return `${path}?error=${encodeURIComponent(getFriendlyErrorMessage(message))}`;
@@ -140,6 +166,28 @@ async function getValidatedAdminClient() {
   return createAdminClient();
 }
 
+/**
+ * Garante que o registro pertence à cidade do gestor ANTES de usar o cliente de
+ * serviço (que ignora o RLS). Sem isto, um gestor de uma cidade poderia alterar
+ * ou excluir registros de outra cidade só enviando o id no formulário.
+ *
+ * A checagem usa o cliente normal, que já é filtrado por cidade pelo RLS: se a
+ * linha não aparece para este usuário, ela não é dele. O master não é filtrado.
+ */
+async function assertRecordInScope(
+  profile: Exclude<CurrentProfile, null>,
+  table: 'health_units' | 'patients' | 'professionals',
+  id: string,
+) {
+  if (profile.is_master) return;
+
+  const supabase = await createClient();
+  const { data } = await supabase.from(table).select('id').eq('id', id).maybeSingle();
+  if (!data) {
+    throw new Error('Este registro pertence a outra cidade ou não está disponível para o seu acesso.');
+  }
+}
+
 async function validateUserManagementGate() {
   const profile = await assertCanManageUsers();
   const isUnlocked = await isUserManagementGateUnlocked(profile.id);
@@ -157,6 +205,25 @@ function validateStatus(status: string, label: string) {
   }
 }
 
+/**
+ * Interpreta a cidade e o nível de um usuário sendo criado/editado pelo master.
+ * Master global não tem cidade; qualquer outro nível exige uma cidade válida.
+ */
+function resolveUserScope(formData: FormData) {
+  const isMaster = String(formData.get('is_master') || '') === '1';
+
+  if (isMaster) {
+    return { cityId: null as string | null, isMaster: true };
+  }
+
+  const cityId = cleanText(formData.get('city_id'), 40);
+  if (!isValidUuid(cityId)) {
+    throw new Error('Selecione a cidade deste usuário ou marque-o como acesso master.');
+  }
+
+  return { cityId, isMaster: false };
+}
+
 export async function createPatientAction(formData: FormData) {
   let errorMessage: string | null = null;
 
@@ -164,23 +231,22 @@ export async function createPatientAction(formData: FormData) {
     const currentProfile = await assertCanManagePatients();
     const fullName = cleanText(formData.get('full_name'), 120);
     const cpf = digitsOnly(formData.get('cpf'), 11);
-    const birthDate = optionalText(formData.get('birth_date'), 10);
     const phone = optionalText(formData.get('phone'), 30);
     const whatsapp = optionalText(formData.get('whatsapp'), 30);
     const address = optionalText(formData.get('address'), 200);
     const neighborhood = optionalText(formData.get('neighborhood'), 100);
+    const cityId = resolveCityId(currentProfile, String(formData.get('city_id') || ''));
 
     validateFullName(fullName, 'o nome completo do paciente');
     validateOptionalCpf(cpf);
     validateOptionalPhone(phone);
     validateOptionalPhone(whatsapp);
-    if (birthDate && !isValidDate(birthDate)) throw new Error('Informe uma data de nascimento válida.');
 
     const supabase = await createClient();
     const { error } = await supabase.from('patients').insert({
       full_name: fullName,
       cpf: cpf || null,
-      birth_date: birthDate,
+      city_id: cityId,
       phone,
       whatsapp,
       address,
@@ -229,7 +295,6 @@ export async function updatePatientAction(formData: FormData) {
     const id = String(formData.get('id') || '');
     const fullName = cleanText(formData.get('full_name'), 120);
     const cpf = digitsOnly(formData.get('cpf'), 11);
-    const birthDate = optionalText(formData.get('birth_date'), 10);
     const phone = optionalText(formData.get('phone'), 30);
     const whatsapp = optionalText(formData.get('whatsapp'), 30);
     const address = optionalText(formData.get('address'), 200);
@@ -242,7 +307,6 @@ export async function updatePatientAction(formData: FormData) {
     validateStatus(status, 'Status do paciente');
     validateOptionalPhone(phone);
     validateOptionalPhone(whatsapp);
-    if (birthDate && !isValidDate(birthDate)) throw new Error('Informe uma data de nascimento válida.');
 
     const supabase = await createClient();
     const { error } = await supabase
@@ -250,7 +314,6 @@ export async function updatePatientAction(formData: FormData) {
       .update({
         full_name: fullName,
         cpf: cpf || null,
-        birth_date: birthDate,
         phone,
         whatsapp,
         address,
@@ -273,7 +336,7 @@ export async function deletePatientAction(formData: FormData) {
   let errorMessage: string | null = null;
 
   try {
-    await assertCanDeletePatients();
+    const currentProfile = await assertCanDeletePatients();
     const id = String(formData.get('id') || '');
     const confirmDelete = String(formData.get('confirm_delete') || '') === '1';
 
@@ -281,6 +344,7 @@ export async function deletePatientAction(formData: FormData) {
     if (!confirmDelete) {
       throw new Error('Confirme a exclusão definitiva do paciente antes de continuar.');
     }
+    await assertRecordInScope(currentProfile, 'patients', id);
 
     const admin = await getValidatedAdminClient();
     const { data: evaluations, error: evaluationsError } = await admin
@@ -334,6 +398,7 @@ export async function createHealthUnitAction(formData: FormData) {
     const neighborhood = optionalText(formData.get('neighborhood'), 100);
     const phone = optionalText(formData.get('phone'), 30);
     const managerName = optionalText(formData.get('manager_name'), 120);
+    const cityId = resolveCityId(currentProfile, String(formData.get('city_id') || ''));
 
     validateFullName(name, 'o nome da unidade');
     validateAddress(address);
@@ -344,6 +409,7 @@ export async function createHealthUnitAction(formData: FormData) {
     const { error } = await supabase.from('health_units').insert({
       name,
       type,
+      city_id: cityId,
       address,
       neighborhood,
       phone,
@@ -388,7 +454,7 @@ export async function updateHealthUnitAction(formData: FormData) {
   let errorMessage: string | null = null;
 
   try {
-    await assertCanManageUnits();
+    const currentProfile = await assertCanManageUnits();
     const id = String(formData.get('id') || '');
     const name = cleanText(formData.get('name'), 120);
     const address = cleanText(formData.get('address'), 200);
@@ -404,6 +470,7 @@ export async function updateHealthUnitAction(formData: FormData) {
     validateOptionalPhone(phone);
     if (!isValidEnum(type, HEALTH_UNIT_TYPES)) throw new Error('Tipo de unidade inválido.');
     validateStatus(status, 'Status da unidade');
+    await assertRecordInScope(currentProfile, 'health_units', id);
 
     const admin = await getValidatedAdminClient();
     const { error } = await admin
@@ -433,12 +500,13 @@ export async function deleteHealthUnitAction(formData: FormData) {
   let errorMessage: string | null = null;
 
   try {
-    await assertCanManageUnits();
+    const currentProfile = await assertCanManageUnits();
     const id = String(formData.get('id') || '');
     const confirmDelete = String(formData.get('confirm_delete') || '') === '1';
 
     ensureUuid(id, 'Unidade não identificada.');
     if (!confirmDelete) throw new Error('Confirme a exclusão definitiva da unidade antes de continuar.');
+    await assertRecordInScope(currentProfile, 'health_units', id);
 
     const admin = await getValidatedAdminClient();
     const [
@@ -553,7 +621,7 @@ export async function updateProfessionalAction(formData: FormData) {
   let errorMessage: string | null = null;
 
   try {
-    await assertCanManageProfessionals();
+    const currentProfile = await assertCanManageProfessionals();
     const id = cleanText(formData.get('id'), 40);
     const fullName = cleanText(formData.get('full_name'), 120);
     const position = cleanText(formData.get('position'), 100);
@@ -567,6 +635,10 @@ export async function updateProfessionalAction(formData: FormData) {
     if (position.length < 2 || position.length > 100) throw new Error('Informe o cargo ou função com 2 a 100 caracteres.');
     ensureUuid(healthUnitId, 'Selecione uma unidade válida.');
     validateStatus(status, 'Status do profissional');
+    // O profissional precisa estar na cidade do gestor, e a unidade de destino
+    // também — senão daria para mover alguém para a cidade de outro gestor.
+    await assertRecordInScope(currentProfile, 'professionals', id);
+    await assertRecordInScope(currentProfile, 'health_units', healthUnitId);
     await ensureHealthUnitExists(healthUnitId);
 
     const admin = await getValidatedAdminClient();
@@ -596,12 +668,13 @@ export async function deleteProfessionalAction(formData: FormData) {
   let errorMessage: string | null = null;
 
   try {
-    await assertCanManageProfessionals();
+    const currentProfile = await assertCanManageProfessionals();
     const id = String(formData.get('id') || '');
     const confirmDelete = String(formData.get('confirm_delete') || '') === '1';
 
     ensureUuid(id, 'Profissional não identificado.');
     if (!confirmDelete) throw new Error('Confirme a exclusão definitiva do profissional antes de continuar.');
+    await assertRecordInScope(currentProfile, 'professionals', id);
     await ensureProfessionalExists(id);
 
     const admin = await getValidatedAdminClient();
@@ -619,6 +692,78 @@ export async function deleteProfessionalAction(formData: FormData) {
   if (errorMessage) redirect(target(PROFESSIONALS_PATH, errorMessage));
   revalidateOperationalData(PROFESSIONALS_PATH, '/avalie', '/painel', '/ranking');
   redirect(successTarget(PROFESSIONALS_PATH, 'Profissional excluído com sucesso.'));
+}
+
+function validateCityName(value: string) {
+  if (value.length < 2 || value.length > 120) {
+    throw new Error('Informe o nome da cidade com 2 a 120 caracteres.');
+  }
+}
+
+function validateUf(value: string) {
+  if (!isValidEnum(value, BRAZIL_UFS)) {
+    throw new Error('Selecione um estado (UF) válido.');
+  }
+}
+
+export async function createCityAction(formData: FormData) {
+  let errorMessage: string | null = null;
+
+  try {
+    const currentProfile = await assertCanManageCities();
+    const name = cleanText(formData.get('name'), 120);
+    const uf = cleanText(formData.get('state_uf'), 2).toUpperCase();
+
+    validateCityName(name);
+    validateUf(uf);
+
+    const supabase = await createClient();
+    const { error } = await supabase.from('cities').insert({
+      name,
+      state_uf: uf,
+      status: 'active',
+      created_by: currentProfile.id,
+    });
+
+    if (error) errorMessage = error.message;
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Não foi possível cadastrar a cidade.';
+  }
+
+  if (errorMessage) redirect(target(CITIES_PATH, errorMessage));
+  revalidateOperationalData(CITIES_PATH, UNITS_PATH, PATIENTS_PATH, USERS_PATH);
+  redirect(successTarget(CITIES_PATH, 'Cidade cadastrada com sucesso.'));
+}
+
+export async function updateCityAction(formData: FormData) {
+  let errorMessage: string | null = null;
+
+  try {
+    await assertCanManageCities();
+    const id = cleanText(formData.get('id'), 40);
+    const name = cleanText(formData.get('name'), 120);
+    const uf = cleanText(formData.get('state_uf'), 2).toUpperCase();
+    const status = cleanText(formData.get('status'), 20);
+
+    ensureUuid(id, 'Cidade não identificada.');
+    validateCityName(name);
+    validateUf(uf);
+    validateStatus(status, 'Status da cidade');
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('cities')
+      .update({ name, state_uf: uf, status })
+      .eq('id', id);
+
+    if (error) errorMessage = error.message;
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Não foi possível editar a cidade.';
+  }
+
+  if (errorMessage) redirect(target(CITIES_PATH, errorMessage));
+  revalidateOperationalData(CITIES_PATH, UNITS_PATH, PATIENTS_PATH, USERS_PATH);
+  redirect(successTarget(CITIES_PATH, 'Cidade atualizada com sucesso.'));
 }
 
 export async function unlockUserManagementAction(formData: FormData) {
@@ -659,6 +804,7 @@ export async function createSystemUserAction(formData: FormData) {
     const email = cleanText(formData.get('email'), 254).toLowerCase();
     const password = String(formData.get('password') || '').trim();
     const role = cleanText(formData.get('role'), 20);
+    const { cityId, isMaster } = resolveUserScope(formData);
 
     validateFullName(fullName, 'o nome completo do usuário');
     if (!isValidEmail(email)) throw new Error('Informe um e-mail válido.');
@@ -682,6 +828,8 @@ export async function createSystemUserAction(formData: FormData) {
         email,
         role,
         status: 'active',
+        city_id: cityId,
+        is_master: isMaster,
       });
 
       if (profileError) {
@@ -709,6 +857,7 @@ export async function updateSystemUserAction(formData: FormData) {
     const password = String(formData.get('password') || '').trim();
     const role = cleanText(formData.get('role'), 20);
     const status = cleanText(formData.get('status'), 20);
+    const { cityId, isMaster } = resolveUserScope(formData);
 
     ensureUuid(id, 'Usuário não identificado.');
     validateFullName(fullName, 'o nome completo do usuário');
@@ -717,8 +866,8 @@ export async function updateSystemUserAction(formData: FormData) {
     if (!isValidEnum(role, APP_ROLES) || !isValidEnum(status, RECORD_STATUSES)) {
       throw new Error('Perfil ou status inválido.');
     }
-    if (id === currentAdmin.id && (role !== 'admin' || status !== 'active')) {
-      throw new Error('Por segurança, o administrador logado não pode remover o próprio acesso.');
+    if (id === currentAdmin.id && (status !== 'active' || !isMaster)) {
+      throw new Error('Por segurança, o usuário master logado não pode remover o próprio acesso.');
     }
 
     const admin = await getValidatedAdminClient();
@@ -739,7 +888,7 @@ export async function updateSystemUserAction(formData: FormData) {
     } else {
       const { error } = await admin
         .from('profiles')
-        .update({ full_name: fullName, email, role, status })
+        .update({ full_name: fullName, email, role, status, city_id: cityId, is_master: isMaster })
         .eq('id', id);
       if (error) errorMessage = error.message;
     }

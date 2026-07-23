@@ -66,7 +66,6 @@ async function resolvePatientId(
 
   const fullName = cleanText(formData.get('new_patient_full_name'), 120);
   const cpf = digitsOnly(formData.get('new_patient_cpf'), 11);
-  const birthDate = optionalText(formData.get('new_patient_birth_date'), 10);
   const phone = optionalText(formData.get('new_patient_phone'), 30);
   const whatsapp = optionalText(formData.get('new_patient_whatsapp'), 30);
   const address = optionalText(formData.get('new_patient_address'), 200);
@@ -80,8 +79,19 @@ async function resolvePatientId(
     throw new Error('Informe um CPF válido com 11 números ou deixe o campo em branco.');
   }
 
-  if (birthDate && !isValidDate(birthDate)) {
-    throw new Error('Informe uma data de nascimento válida.');
+  // O paciente novo nasce na mesma cidade da unidade avaliada, para nunca criar
+  // registro fora do escopo do gestor.
+  const healthUnitId = cleanText(formData.get('health_unit_id'), 40);
+  if (!isValidUuid(healthUnitId)) {
+    throw new Error('Selecione a unidade antes de cadastrar um novo paciente.');
+  }
+  const { data: unitForCity, error: unitCityError } = await supabase
+    .from('health_units')
+    .select('city_id')
+    .eq('id', healthUnitId)
+    .maybeSingle();
+  if (unitCityError || !unitForCity?.city_id) {
+    throw new Error('Não foi possível identificar a cidade da unidade selecionada.');
   }
 
   if (cpf) {
@@ -103,7 +113,7 @@ async function resolvePatientId(
     .insert({
       full_name: fullName,
       cpf: cpf || null,
-      birth_date: birthDate,
+      city_id: unitForCity.city_id,
       phone,
       whatsapp,
       address,

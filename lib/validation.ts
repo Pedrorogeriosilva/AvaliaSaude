@@ -11,6 +11,11 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const APP_ROLES: AppRole[] = ['admin', 'operator', 'viewer'];
+export const BRAZIL_UFS = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+  'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
+  'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+] as const;
 export const RECORD_STATUSES: RecordStatus[] = ['active', 'inactive'];
 export const HEALTH_UNIT_TYPES: HealthUnitType[] = ['psf', 'hospital', 'other'];
 export const CONTACT_TYPES: ContactType[] = ['phone', 'whatsapp', 'in_person'];

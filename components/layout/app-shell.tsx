@@ -16,6 +16,8 @@ type Props = {
     full_name?: string | null;
     email?: string | null;
     role?: string | null;
+    is_master?: boolean;
+    city_label?: string | null;
   } | null;
 };
 
@@ -27,7 +29,11 @@ const roleLabel: Record<string, string> = {
 
 export function AppShell({ children, profile }: Props) {
   const displayName = profile?.full_name || profile?.email?.split('@')[0] || 'Usuário';
-  const role = profile?.role ? roleLabel[profile.role] || profile.role : 'Perfil';
+  // O escopo — cidade ou "todas as cidades" — precede o papel, porque num sistema
+  // multi-cidade é a informação que evita lançar dado na cidade errada.
+  const scope = profile?.is_master
+    ? 'Todas as cidades'
+    : profile?.city_label || (profile?.role ? roleLabel[profile.role] || profile.role : 'Perfil');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -42,7 +48,7 @@ export function AppShell({ children, profile }: Props) {
           <div className="flex items-center gap-3">
             <div className="hidden text-right lg:block">
               <div className="max-w-[220px] truncate text-sm font-semibold text-slate-900">{displayName}</div>
-              <div className="max-w-[220px] truncate text-xs text-slate-500">{role} · {profile?.email}</div>
+              <div className="max-w-[220px] truncate text-xs text-slate-500">{scope} · {profile?.email}</div>
             </div>
             <form action={logoutAction}>
               <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">

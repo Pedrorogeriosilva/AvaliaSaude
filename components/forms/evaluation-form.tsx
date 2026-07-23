@@ -28,7 +28,6 @@ type ReviewData = {
 type EvaluationFormState = {
   new_patient_full_name: string;
   new_patient_cpf: string;
-  new_patient_birth_date: string;
   new_patient_phone: string;
   new_patient_whatsapp: string;
   new_patient_address: string;
@@ -60,7 +59,6 @@ const generalScoreFields = [
 const initialFormState: EvaluationFormState = {
   new_patient_full_name: '',
   new_patient_cpf: '',
-  new_patient_birth_date: '',
   new_patient_phone: '',
   new_patient_whatsapp: '',
   new_patient_address: '',
@@ -366,16 +364,6 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
                 value={formState.new_patient_cpf}
                 onChange={(event) => updateField('new_patient_cpf', event.target.value)}
                 placeholder="Somente números"
-                className={smallFieldClass}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Nascimento</span>
-              <input
-                name="new_patient_birth_date"
-                type="date"
-                value={formState.new_patient_birth_date}
-                onChange={(event) => updateField('new_patient_birth_date', event.target.value)}
                 className={smallFieldClass}
               />
             </label>

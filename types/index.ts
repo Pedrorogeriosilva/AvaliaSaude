@@ -1,5 +1,13 @@
 export type AppRole = 'admin' | 'operator' | 'viewer';
 export type RecordStatus = 'active' | 'inactive';
+
+export type City = {
+  id: string;
+  name: string;
+  state_uf: string;
+  status: RecordStatus;
+  created_at?: string;
+};
 export type HealthUnitType = 'psf' | 'hospital' | 'other';
 export type ContactType = 'phone' | 'whatsapp' | 'in_person';
 export type ResolutionStatus = 'resolved' | 'partial' | 'unresolved';
@@ -9,7 +17,7 @@ export type Patient = {
   id: string;
   full_name: string;
   cpf: string | null;
-  birth_date: string | null;
+  city_id?: string | null;
   phone: string | null;
   whatsapp: string | null;
   address: string | null;
@@ -22,6 +30,7 @@ export type HealthUnit = {
   id: string;
   name: string;
   type: HealthUnitType;
+  city_id?: string | null;
   address: string;
   neighborhood: string | null;
   phone: string | null;
@@ -92,5 +101,7 @@ export type Profile = {
   email: string;
   role: AppRole;
   status: RecordStatus;
+  is_master?: boolean;
+  city_id?: string | null;
   created_at: string;
 };

@@ -1,18 +1,20 @@
 import Link from 'next/link';
-import { Building2, ShieldCheck, Stethoscope, Users } from 'lucide-react';
+import { Building2, MapPin, ShieldCheck, Stethoscope, Users } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { getCurrentProfile } from '@/lib/auth';
 
 const cards = [
-  { href: '/cadastros/pacientes', title: 'Pacientes', icon: Users },
-  { href: '/cadastros/unidades', title: 'Unidades de saúde', icon: Building2 },
-  { href: '/cadastros/profissionais', title: 'Profissionais', icon: Stethoscope },
-  { href: '/cadastros/usuarios', title: 'Usuários do sistema', icon: ShieldCheck },
+  { href: '/cadastros/cidades', title: 'Cidades', icon: MapPin, masterOnly: true },
+  { href: '/cadastros/pacientes', title: 'Pacientes', icon: Users, masterOnly: false },
+  { href: '/cadastros/unidades', title: 'Unidades de saúde', icon: Building2, masterOnly: false },
+  { href: '/cadastros/profissionais', title: 'Profissionais', icon: Stethoscope, masterOnly: false },
+  { href: '/cadastros/usuarios', title: 'Usuários do sistema', icon: ShieldCheck, masterOnly: true },
 ];
 
 export default async function CadastrosPage() {
   const currentProfile = await getCurrentProfile();
-  const visibleCards = currentProfile?.role === 'admin' ? cards : cards.filter((card) => card.href !== '/cadastros/usuarios');
+  const isMaster = Boolean(currentProfile?.is_master);
+  const visibleCards = isMaster ? cards : cards.filter((card) => !card.masterOnly);
 
   return (
     <>

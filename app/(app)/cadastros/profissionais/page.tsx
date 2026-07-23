@@ -69,7 +69,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
       supabase.from('health_units').select('id, name').order('name'),
       professionalsRequest,
     ]);
-    const isAdmin = currentProfile?.role === 'admin';
+    const isAdmin = Boolean(currentProfile?.is_master) || currentProfile?.role === 'admin';
 
     const error = unitsError || professionalsError;
 

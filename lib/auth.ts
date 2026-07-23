@@ -11,6 +11,8 @@ export type CurrentProfile = {
   email: string | null;
   role: AppRole;
   status: string | null;
+  is_master: boolean;
+  city_id: string | null;
 } | null;
 
 const getCurrentUser = cache(async () => {
@@ -37,7 +39,7 @@ export const getCurrentProfile = cache(async (): Promise<CurrentProfile> => {
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role, status')
+        .select('id, full_name, email, role, status, is_master, city_id')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -56,6 +58,8 @@ export const getCurrentProfile = cache(async (): Promise<CurrentProfile> => {
         email: profile.email || user.email || null,
         role: profile.role as AppRole,
         status: profile.status || null,
+        is_master: Boolean(profile.is_master),
+        city_id: profile.city_id ?? null,
       };
     });
   } catch {
@@ -72,8 +76,18 @@ export async function requireActiveProfile() {
 }
 
 function assertRole(profile: Exclude<CurrentProfile, null>, allowedRoles: AppRole[], message: string) {
+  // O master faz tudo em qualquer cidade, então nunca esbarra no papel.
+  if (profile.is_master) return profile;
   if (!allowedRoles.includes(profile.role)) {
     throw new Error(message);
+  }
+  return profile;
+}
+
+export async function requireMaster() {
+  const profile = await requireActiveProfile();
+  if (!profile.is_master) {
+    throw new Error('Apenas o usuário master pode realizar esta ação.');
   }
   return profile;
 }
@@ -111,5 +125,9 @@ export async function assertCanManageProfessionals() {
 }
 
 export async function assertCanManageUsers() {
-  return requireAdmin();
+  return requireMaster();
+}
+
+export async function assertCanManageCities() {
+  return requireMaster();
 }

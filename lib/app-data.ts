@@ -343,6 +343,17 @@ export const getEvaluationFormData = cache(async (): Promise<EvaluationFormData>
   }),
 );
 
+export const getActiveCities = cache(async (): Promise<{ id: string; name: string; state_uf: string }[]> =>
+  withReadClient('getActiveCities', async (supabase) => {
+    const { data } = await supabase
+      .from('cities')
+      .select('id, name, state_uf')
+      .eq('status', 'active')
+      .order('name');
+    return (data || []) as { id: string; name: string; state_uf: string }[];
+  }),
+);
+
 export async function searchPatients(search: string) {
   const normalized = normalizeSearchQuery(search);
   if (normalized.length < 2) return [];
