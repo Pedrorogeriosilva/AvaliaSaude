@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { CityFilter } from '@/components/dashboard/city-filter';
 import { LazyMonthlyChart } from '@/components/dashboard/lazy-monthly-chart';
 import { LazyUnitBarChart } from '@/components/dashboard/lazy-unit-bar-chart';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -6,14 +7,19 @@ import { PageHeader } from '@/components/ui/page-header';
 import { SectionCard } from '@/components/ui/section-card';
 import { StatCard } from '@/components/ui/stat-card';
 import {
+  getActiveCities,
+  getCityComparison,
   getDashboardChartData,
   getDashboardNotesData,
   getDashboardProfessionalsData,
   getDashboardSummaryData,
 } from '@/lib/app-data';
+import { getCurrentProfile } from '@/lib/auth';
 import { formatDate, formatInteger, formatNumber, labelManifestation, labelUnitType } from '@/lib/format';
 import { getFriendlySupabaseError } from '@/lib/supabase/errors';
 import type { UnitMetric } from '@/types';
+
+type Props = { searchParams?: Promise<{ cidade?: string }> };
 
 function safeNumber(value: number | string | null | undefined) {
   const parsed = Number(value ?? 0);
@@ -68,8 +74,8 @@ function LoadError({ error }: { error: Parameters<typeof getFriendlySupabaseErro
  * consultada uma única vez por requisição mesmo com três seções pedindo por ela.
  */
 
-async function StatsSection() {
-  const { data: units, error } = await getDashboardSummaryData();
+async function StatsSection({ cityId }: { cityId?: string }) {
+  const { data: units, error } = await getDashboardSummaryData(cityId);
 
   if (error) return <LoadError error={error} />;
 
@@ -87,8 +93,8 @@ async function StatsSection() {
   );
 }
 
-async function MonthlyChartSection() {
-  const { monthly, error } = await getDashboardChartData();
+async function MonthlyChartSection({ cityId }: { cityId?: string }) {
+  const { monthly, error } = await getDashboardChartData(cityId);
 
   if (error) return <LoadError error={error} />;
   if (!monthly.length) return <EmptyState title="Sem dados." />;
@@ -96,8 +102,8 @@ async function MonthlyChartSection() {
   return <LazyMonthlyChart data={monthly} />;
 }
 
-async function UnitChartSection() {
-  const { units, error } = await getDashboardChartData();
+async function UnitChartSection({ cityId }: { cityId?: string }) {
+  const { units, error } = await getDashboardChartData(cityId);
 
   if (error) return <LoadError error={error} />;
   if (!units.length) return <EmptyState title="Sem dados." />;
@@ -105,8 +111,8 @@ async function UnitChartSection() {
   return <LazyUnitBarChart data={units} />;
 }
 
-async function UnitTableSection() {
-  const { data: units, error } = await getDashboardSummaryData();
+async function UnitTableSection({ cityId }: { cityId?: string }) {
+  const { data: units, error } = await getDashboardSummaryData(cityId);
 
   if (error) return <LoadError error={error} />;
 
@@ -178,8 +184,8 @@ function UnitMetricItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-async function ProfessionalsSection() {
-  const { professionals, error } = await getDashboardProfessionalsData();
+async function ProfessionalsSection({ cityId }: { cityId?: string }) {
+  const { professionals, error } = await getDashboardProfessionalsData(cityId);
 
   if (error) return <LoadError error={error} />;
   if (!professionals.length) return <EmptyState title="Nenhum profissional avaliado." />;
@@ -199,8 +205,8 @@ async function ProfessionalsSection() {
   );
 }
 
-async function NotesSection() {
-  const { notes, error } = await getDashboardNotesData();
+async function NotesSection({ cityId }: { cityId?: string }) {
+  const { notes, error } = await getDashboardNotesData(cityId);
 
   if (error) return <LoadError error={error} />;
 
@@ -233,47 +239,106 @@ async function NotesSection() {
   );
 }
 
-export default function PainelPage() {
+async function CityComparisonSection() {
+  const { rows, error } = await getCityComparison();
+
+  if (error) return <LoadError error={error} />;
+  if (rows.length < 2) return null;
+
+  return (
+    <div className="mb-6">
+      <SectionCard title="Comparativo por cidade">
+        <div className="table-responsive">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
+                <th className="px-3 py-3">Cidade</th>
+                <th className="px-3 py-3">Unidades</th>
+                <th className="px-3 py-3">Avaliacoes</th>
+                <th className="px-3 py-3">Nota</th>
+                <th className="px-3 py-3">Resolucao</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.city_id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-3 py-3 font-semibold text-slate-900">{row.city_name}</td>
+                  <td className="px-3 py-3">{formatInteger(row.unit_count)}</td>
+                  <td className="px-3 py-3">{formatInteger(row.total_evaluations)}</td>
+                  <td className="px-3 py-3 font-semibold text-blue-700">{formatNumber(row.avg_general_score)}</td>
+                  <td className="px-3 py-3">{formatNumber(row.resolution_rate)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+export default async function PainelPage({ searchParams }: Props) {
+  const params = searchParams ? await searchParams : {};
+  const profile = await getCurrentProfile();
+  const isMaster = Boolean(profile?.is_master);
+
+  // Só o master escolhe cidade. Para os demais, o RLS já limita, então cityId
+  // fica indefinido (a consulta não precisa filtrar de novo).
+  const cities = isMaster ? await getActiveCities() : [];
+  const requestedCity = params.cidade || '';
+  const selectedCityId = isMaster && cities.some((city) => city.id === requestedCity) ? requestedCity : '';
+  const cityId = selectedCityId || undefined;
+  const showComparison = isMaster && !cityId;
+
   return (
     <>
-      <PageHeader title="Painel" />
+      <PageHeader
+        title="Painel"
+        actions={isMaster && cities.length ? <CityFilter cities={cities} selectedCityId={selectedCityId} /> : undefined}
+      />
 
-      <Suspense fallback={<StatsFallback />}>
-        <StatsSection />
+      {showComparison ? (
+        <Suspense fallback={<CardFallback className="h-40" />}>
+          <CityComparisonSection />
+        </Suspense>
+      ) : null}
+
+      <Suspense key={`stats-${cityId ?? 'all'}`} fallback={<StatsFallback />}>
+        <StatsSection cityId={cityId} />
       </Suspense>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <SectionCard title="Evolucao mensal da nota geral">
-          <Suspense fallback={<CardFallback className="h-72" />}>
-            <MonthlyChartSection />
+          <Suspense key={`monthly-${cityId ?? 'all'}`} fallback={<CardFallback className="h-72" />}>
+            <MonthlyChartSection cityId={cityId} />
           </Suspense>
         </SectionCard>
 
         <SectionCard title="Notas por unidade">
-          <Suspense fallback={<CardFallback className="h-72" />}>
-            <UnitChartSection />
+          <Suspense key={`unitchart-${cityId ?? 'all'}`} fallback={<CardFallback className="h-72" />}>
+            <UnitChartSection cityId={cityId} />
           </Suspense>
         </SectionCard>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <SectionCard title="Resumo por unidade">
-          <Suspense fallback={<CardFallback className="h-64" />}>
-            <UnitTableSection />
+          <Suspense key={`unittable-${cityId ?? 'all'}`} fallback={<CardFallback className="h-64" />}>
+            <UnitTableSection cityId={cityId} />
           </Suspense>
         </SectionCard>
 
         <SectionCard title="Profissionais em destaque">
-          <Suspense fallback={<CardFallback className="h-64" />}>
-            <ProfessionalsSection />
+          <Suspense key={`pros-${cityId ?? 'all'}`} fallback={<CardFallback className="h-64" />}>
+            <ProfessionalsSection cityId={cityId} />
           </Suspense>
         </SectionCard>
       </div>
 
       <div className="mt-6">
         <SectionCard title="Observacoes recentes">
-          <Suspense fallback={<CardFallback className="h-52" />}>
-            <NotesSection />
+          <Suspense key={`notes-${cityId ?? 'all'}`} fallback={<CardFallback className="h-52" />}>
+            <NotesSection cityId={cityId} />
           </Suspense>
         </SectionCard>
       </div>

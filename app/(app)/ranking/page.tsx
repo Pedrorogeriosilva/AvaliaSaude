@@ -1,15 +1,27 @@
+import { CityFilter } from '@/components/dashboard/city-filter';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SectionCard } from '@/components/ui/section-card';
-import { getRankingData } from '@/lib/app-data';
+import { getActiveCities, getRankingData } from '@/lib/app-data';
+import { getCurrentProfile } from '@/lib/auth';
 import { formatInteger, formatNumber, labelUnitType } from '@/lib/format';
 import { getFriendlySupabaseError } from '@/lib/supabase/errors';
 
+type Props = { searchParams?: Promise<{ cidade?: string }> };
+
 type RankingRow = { id: string; name: string; subtitle: string; score: string | number | null };
 
-export default async function RankingPage() {
+export default async function RankingPage({ searchParams }: Props) {
+  const params = searchParams ? await searchParams : {};
+  const profile = await getCurrentProfile();
+  const isMaster = Boolean(profile?.is_master);
+  const cities = isMaster ? await getActiveCities() : [];
+  const requestedCity = params.cidade || '';
+  const selectedCityId = isMaster && cities.some((city) => city.id === requestedCity) ? requestedCity : '';
+  const cityId = selectedCityId || undefined;
+
   try {
-    const { bestUnits, worstUnits, bestProfessionals, worstProfessionals, error } = await getRankingData();
+    const { bestUnits, worstUnits, bestProfessionals, worstProfessionals, error } = await getRankingData(cityId);
 
     if (error) {
       return <EmptyState title="Não foi possível carregar os dados." description={getFriendlySupabaseError(error, 'Não foi possível carregar os dados.')} />;
@@ -17,7 +29,10 @@ export default async function RankingPage() {
 
     return (
       <>
-        <PageHeader title="Ranking" />
+        <PageHeader
+          title="Ranking"
+          actions={isMaster && cities.length ? <CityFilter cities={cities} selectedCityId={selectedCityId} /> : undefined}
+        />
         <div className="grid gap-6 lg:grid-cols-2">
           <SectionCard title="Melhores unidades">
             <RankingTable rows={bestUnits.map((unit) => ({ id: unit.health_unit_id, name: unit.health_unit_name, subtitle: `${labelUnitType(unit.health_unit_type)} · ${formatInteger(unit.total_evaluations)} avaliações`, score: unit.avg_general_score }))} emptyText="Nenhuma avaliação registrada." />

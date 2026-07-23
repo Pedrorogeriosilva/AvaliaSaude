@@ -642,9 +642,13 @@ drop view if exists public.v_unit_metrics;
 drop view if exists public.v_unit_monthly_metrics;
 drop view if exists public.v_professional_metrics;
 
+-- Agrupada por cidade + mês para o painel do master poder filtrar por cidade.
+-- Na visão "todas as cidades", o aplicativo reagrupa por mês ponderando pela
+-- quantidade de avaliações (média de médias seria incorreta).
 create view public.v_city_monthly_metrics
 with (security_invoker = true) as
 select
+  hu.city_id,
   date_trunc('month', e.attendance_date)::date as month,
   count(*)::integer as total_evaluations,
   round(avg(e.general_score), 2) as avg_general_score,
@@ -656,7 +660,7 @@ from public.evaluations e
 join public.patients p on p.id = e.patient_id and p.status = 'active'
 join public.health_units hu on hu.id = e.health_unit_id and hu.status = 'active'
 where public.is_active_profile(e.created_by)
-group by date_trunc('month', e.attendance_date);
+group by hu.city_id, date_trunc('month', e.attendance_date);
 
 create view public.v_unit_metrics
 with (security_invoker = true) as

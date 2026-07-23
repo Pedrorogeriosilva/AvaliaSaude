@@ -127,15 +127,19 @@ async function withReadClient<T>(label: string, task: (supabase: SupabaseClientL
   });
 }
 
-const fetchUnitMetrics = cache(async (): Promise<DashboardSectionResult<UnitMetric[]>> =>
+const fetchUnitMetrics = cache(async (cityId?: string): Promise<DashboardSectionResult<UnitMetric[]>> =>
   withReadClient('getDashboardSummaryData', async (supabase) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('v_unit_metrics')
-        .select('health_unit_id, health_unit_name, health_unit_type, health_unit_status, total_evaluations, avg_general_score, avg_satisfaction_score, avg_structure_score, avg_clarity_score, avg_service_quality_score, avg_wait_time_minutes, resolution_rate, last_evaluation_date')
+        .select('health_unit_id, health_unit_name, health_unit_type, health_unit_status, city_id, total_evaluations, avg_general_score, avg_satisfaction_score, avg_structure_score, avg_clarity_score, avg_service_quality_score, avg_wait_time_minutes, resolution_rate, last_evaluation_date')
         .eq('health_unit_status', 'active')
         .order('avg_general_score', { ascending: false, nullsFirst: false })
-        .limit(24);
+        .limit(200);
+
+      if (cityId) query = query.eq('city_id', cityId);
+
+      const { data, error } = await query;
 
       return {
         data: (data || []) as UnitMetric[],
@@ -147,18 +151,44 @@ const fetchUnitMetrics = cache(async (): Promise<DashboardSectionResult<UnitMetr
   }),
 );
 
-const fetchMonthlyMetrics = cache(async (): Promise<DashboardSectionResult<CityMonthlyMetric[]>> =>
+type MonthlyRow = { city_id: string | null; month: string; avg_general_score: number | string | null; total_evaluations: number | string | null };
+
+const fetchMonthlyMetrics = cache(async (cityId?: string): Promise<DashboardSectionResult<CityMonthlyMetric[]>> =>
   withReadClient('getDashboardChartData.monthly', async (supabase) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('v_city_monthly_metrics')
-        .select('month, avg_general_score')
-        .order('month', { ascending: false })
-        .limit(12);
+        .select('city_id, month, avg_general_score, total_evaluations');
+
+      if (cityId) query = query.eq('city_id', cityId);
+
+      const { data, error } = await query;
+      if (error) {
+        return { data: [], error: normalizeError(error) };
+      }
+
+      // A view vem por (cidade, mês). Reagrupamos por mês ponderando a nota pela
+      // quantidade de avaliações — média de médias entre cidades seria incorreta.
+      const byMonth = new Map<string, { sum: number; total: number }>();
+      for (const row of (data || []) as MonthlyRow[]) {
+        const total = safeNumber(row.total_evaluations);
+        if (total <= 0) continue;
+        const current = byMonth.get(row.month) || { sum: 0, total: 0 };
+        current.sum += safeNumber(row.avg_general_score) * total;
+        current.total += total;
+        byMonth.set(row.month, current);
+      }
+
+      const months = Array.from(byMonth.entries())
+        .map(([month, aggregate]) => ({
+          month,
+          avg_general_score: aggregate.total ? Number((aggregate.sum / aggregate.total).toFixed(2)) : 0,
+        }))
+        .sort((left, right) => (left.month < right.month ? -1 : left.month > right.month ? 1 : 0));
 
       return {
-        data: [...((data || []) as CityMonthlyMetric[])].reverse(),
-        error: normalizeError(error),
+        data: months.slice(-12) as CityMonthlyMetric[],
+        error: null,
       };
     } catch (error) {
       return { data: [], error: normalizeError(error) };
@@ -172,17 +202,21 @@ const fetchMonthlyMetrics = cache(async (): Promise<DashboardSectionResult<CityM
  * exigia baixar todas as linhas de `evaluation_professionals` do município e
  * mais três consultas de apoio a cada carregamento do painel.
  */
-const fetchProfessionalMetrics = cache(async (): Promise<DashboardSectionResult<ProfessionalMetric[]>> =>
+const fetchProfessionalMetrics = cache(async (cityId?: string): Promise<DashboardSectionResult<ProfessionalMetric[]>> =>
   withReadClient('getDashboardProfessionalsData', async (supabase) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('v_professional_metrics')
-        .select('professional_id, professional_name, position, health_unit_id, health_unit_name, professional_status, health_unit_status, total_evaluations, avg_professional_score, last_evaluation_date')
+        .select('professional_id, professional_name, position, health_unit_id, health_unit_name, city_id, professional_status, health_unit_status, total_evaluations, avg_professional_score, last_evaluation_date')
         .eq('professional_status', 'active')
         .eq('health_unit_status', 'active')
         .gt('total_evaluations', 0)
         .order('avg_professional_score', { ascending: false, nullsFirst: false })
         .limit(200);
+
+      if (cityId) query = query.eq('city_id', cityId);
+
+      const { data, error } = await query;
 
       if (error) {
         return { data: [], error: normalizeError(error) };
@@ -215,13 +249,13 @@ const fetchProfessionalMetrics = cache(async (): Promise<DashboardSectionResult<
   }),
 );
 
-const fetchRecentNotes = cache(async (): Promise<DashboardSectionResult<EvaluationNote[]>> =>
+const fetchRecentNotes = cache(async (cityId?: string): Promise<DashboardSectionResult<EvaluationNote[]>> =>
   withReadClient('getDashboardNotesData', async (supabase) => {
     try {
       // Uma única consulta com folga sobre o limite. Os joins `!inner` e o
       // filtro de `general_notes` já acontecem no banco; a folga cobre apenas
       // os comentários que são só espaço em branco e caem no filtro abaixo.
-      const { data, error } = await supabase
+      let query = supabase
         .from('evaluations')
         .select(`
           id,
@@ -231,7 +265,7 @@ const fetchRecentNotes = cache(async (): Promise<DashboardSectionResult<Evaluati
           general_notes,
           created_at,
           patients!inner(id, full_name, status),
-          health_units!inner(id, name, status)
+          health_units!inner(id, name, status, city_id)
         `)
         .not('general_notes', 'is', null)
         .neq('general_notes', '')
@@ -240,6 +274,10 @@ const fetchRecentNotes = cache(async (): Promise<DashboardSectionResult<Evaluati
         .order('created_at', { ascending: false })
         .order('attendance_date', { ascending: false })
         .limit(RECENT_NOTES_FETCH_LIMIT);
+
+      if (cityId) query = query.eq('health_units.city_id', cityId);
+
+      const { data, error } = await query;
 
       if (error) {
         return { data: [], error: normalizeError(error) };
@@ -280,14 +318,14 @@ const fetchRecentNotes = cache(async (): Promise<DashboardSectionResult<Evaluati
   }),
 );
 
-export const getDashboardSummaryData = cache(async (): Promise<DashboardSectionResult<UnitMetric[]>> => {
-  const result = await fetchUnitMetrics();
+export const getDashboardSummaryData = cache(async (cityId?: string): Promise<DashboardSectionResult<UnitMetric[]>> => {
+  const result = await fetchUnitMetrics(cityId);
   logDashboardError('units', result.error);
   return result;
 });
 
-export const getDashboardChartData = cache(async (): Promise<{ monthly: CityMonthlyMetric[]; units: UnitMetric[]; error: QueryError }> => {
-  const [monthlyResult, unitsResult] = await Promise.all([fetchMonthlyMetrics(), fetchUnitMetrics()]);
+export const getDashboardChartData = cache(async (cityId?: string): Promise<{ monthly: CityMonthlyMetric[]; units: UnitMetric[]; error: QueryError }> => {
+  const [monthlyResult, unitsResult] = await Promise.all([fetchMonthlyMetrics(cityId), fetchUnitMetrics(cityId)]);
   logDashboardError('monthly', monthlyResult.error);
   logDashboardError('units', unitsResult.error);
 
@@ -301,14 +339,14 @@ export const getDashboardChartData = cache(async (): Promise<{ monthly: CityMont
   };
 });
 
-export const getDashboardProfessionalsData = cache(async (): Promise<{ professionals: ProfessionalMetric[]; error: QueryError }> => {
-  const result = await fetchProfessionalMetrics();
+export const getDashboardProfessionalsData = cache(async (cityId?: string): Promise<{ professionals: ProfessionalMetric[]; error: QueryError }> => {
+  const result = await fetchProfessionalMetrics(cityId);
   logDashboardError('professionals', result.error);
   return { professionals: result.data.slice(0, 5), error: result.error };
 });
 
-export const getDashboardNotesData = cache(async (): Promise<{ notes: EvaluationNote[]; error: QueryError }> => {
-  const result = await fetchRecentNotes();
+export const getDashboardNotesData = cache(async (cityId?: string): Promise<{ notes: EvaluationNote[]; error: QueryError }> => {
+  const result = await fetchRecentNotes(cityId);
   logDashboardError('notes', result.error);
   return { notes: result.data, error: result.error };
 });
@@ -342,6 +380,58 @@ export const getEvaluationFormData = cache(async (): Promise<EvaluationFormData>
     };
   }),
 );
+
+export type CityComparisonRow = {
+  city_id: string;
+  city_name: string;
+  total_evaluations: number;
+  avg_general_score: number;
+  resolution_rate: number;
+  unit_count: number;
+};
+
+/**
+ * Consolida as métricas por cidade para a visão "todas as cidades" do master.
+ * Parte de `v_unit_metrics` (uma linha por unidade, já com `city_id`) e agrega
+ * por cidade ponderando as médias pela quantidade de avaliações.
+ */
+export const getCityComparison = cache(async (): Promise<{ rows: CityComparisonRow[]; error: QueryError }> => {
+  const [unitsResult, cities] = await Promise.all([fetchUnitMetrics(), getActiveCities()]);
+  if (unitsResult.error) {
+    return { rows: [], error: unitsResult.error };
+  }
+
+  const cityNameById = new Map(cities.map((city) => [city.id, `${city.name} / ${city.state_uf}`]));
+  const aggregates = new Map<string, { evaluations: number; scoreSum: number; resolutionSum: number; units: number }>();
+
+  for (const unit of unitsResult.data) {
+    const cityId = unit.city_id;
+    if (!cityId) continue;
+
+    const evaluations = safeNumber(unit.total_evaluations);
+    const current = aggregates.get(cityId) || { evaluations: 0, scoreSum: 0, resolutionSum: 0, units: 0 };
+    current.units += 1;
+    if (evaluations > 0) {
+      current.evaluations += evaluations;
+      current.scoreSum += safeNumber(unit.avg_general_score) * evaluations;
+      current.resolutionSum += safeNumber(unit.resolution_rate) * evaluations;
+    }
+    aggregates.set(cityId, current);
+  }
+
+  const rows: CityComparisonRow[] = Array.from(aggregates.entries()).map(([cityId, aggregate]) => ({
+    city_id: cityId,
+    city_name: cityNameById.get(cityId) || 'Cidade removida',
+    total_evaluations: aggregate.evaluations,
+    avg_general_score: aggregate.evaluations ? Number((aggregate.scoreSum / aggregate.evaluations).toFixed(2)) : 0,
+    resolution_rate: aggregate.evaluations ? Number((aggregate.resolutionSum / aggregate.evaluations).toFixed(2)) : 0,
+    unit_count: aggregate.units,
+  }));
+
+  rows.sort((left, right) => right.avg_general_score - left.avg_general_score || right.total_evaluations - left.total_evaluations);
+
+  return { rows, error: null };
+});
 
 export const getActiveCities = cache(async (): Promise<{ id: string; name: string; state_uf: string }[]> =>
   withReadClient('getActiveCities', async (supabase) => {
@@ -393,8 +483,8 @@ export async function searchPatients(search: string) {
   });
 }
 
-export const getRankingData = cache(async (): Promise<RankingData> => {
-  const [unitsResult, professionalsResult] = await Promise.all([fetchUnitMetrics(), fetchProfessionalMetrics()]);
+export const getRankingData = cache(async (cityId?: string): Promise<RankingData> => {
+  const [unitsResult, professionalsResult] = await Promise.all([fetchUnitMetrics(cityId), fetchProfessionalMetrics(cityId)]);
 
   logDashboardError('units', unitsResult.error);
   logDashboardError('professionals', professionalsResult.error);

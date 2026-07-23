@@ -54,6 +54,7 @@ export type UnitMetric = {
   health_unit_name: string;
   health_unit_type: HealthUnitType;
   health_unit_status?: RecordStatus;
+  city_id?: string | null;
   total_evaluations: number | string | null;
   avg_general_score: number | string | null;
   avg_satisfaction_score: number | string | null;
@@ -88,6 +89,7 @@ export type ProfessionalMetric = {
   position: string;
   health_unit_id?: string;
   health_unit_name: string;
+  city_id?: string | null;
   professional_status?: RecordStatus;
   health_unit_status?: RecordStatus;
   total_evaluations: number | string | null;
