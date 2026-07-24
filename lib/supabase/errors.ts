@@ -156,10 +156,9 @@ export function getFriendlyErrorMessage(error: unknown, fallback = 'Não foi pos
   }
 
   if (code === '23514' || includesAny(message, ['violates check constraint', 'check constraint'])) {
-    if (includesAny(message, ['score', 'nota', 'general_score', 'satisfaction_score', 'structure_score', 'clarity_score', 'service_quality_score', 'evaluation_professionals_score'])) {
+    if (includesAny(message, ['score', 'nota', 'general_score', 'structure_score', 'wait_time_score', 'evaluation_professionals_score'])) {
       return 'Informe notas válidas entre 0 e 10.';
     }
-    if (message.includes('wait_time')) return 'O tempo de espera não pode ser negativo.';
     if (message.includes('attendance_date')) return 'A data do atendimento não pode ser futura.';
     if (message.includes('status')) return 'Status inválido. Selecione uma opção válida.';
     if (message.includes('resolution')) return 'Resolução inválida. Selecione uma opção válida.';

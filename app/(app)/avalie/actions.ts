@@ -17,7 +17,6 @@ import {
   isValidEnum,
   isValidUuid,
   optionalText,
-  parseNonNegativeInteger,
   parseScore,
 } from '@/lib/validation';
 
@@ -141,7 +140,6 @@ export async function createEvaluationAction(formData: FormData) {
     const healthUnitId = cleanText(formData.get('health_unit_id'), 40);
     const attendanceDate = cleanText(formData.get('attendance_date'), 10);
     const contactType = cleanText(formData.get('contact_type'), 20) || 'in_person';
-    const waitTimeMinutes = parseNonNegativeInteger(formData.get('wait_time_minutes'));
     const resolution = cleanText(formData.get('resolution'), 20) || 'partial';
     const manifestation = cleanText(formData.get('manifestation'), 20) || 'neutral';
     const generalNotes = optionalText(formData.get('general_notes'), 2000);
@@ -154,13 +152,10 @@ export async function createEvaluationAction(formData: FormData) {
       health_unit_id: healthUnitId,
       attendance_date: attendanceDate,
       contact_type: contactType,
-      wait_time_minutes: waitTimeMinutes,
       resolution,
       general_score: parseScore(formData.get('general_score')),
-      satisfaction_score: parseScore(formData.get('satisfaction_score')),
       structure_score: parseScore(formData.get('structure_score')),
-      clarity_score: parseScore(formData.get('clarity_score')),
-      service_quality_score: parseScore(formData.get('service_quality_score')),
+      wait_time_score: parseScore(formData.get('wait_time_score')),
       manifestation,
       general_notes: generalNotes,
       created_by: currentProfile.id,
@@ -182,10 +177,8 @@ export async function createEvaluationAction(formData: FormData) {
       target = errorTarget('Tipo de manifestação inválido. Selecione uma opção válida.');
     } else if (
       payload.general_score === null ||
-      payload.satisfaction_score === null ||
       payload.structure_score === null ||
-      payload.clarity_score === null ||
-      payload.service_quality_score === null
+      payload.wait_time_score === null
     ) {
       target = errorTarget('Informe todas as notas gerais entre 0 e 10.');
     } else {

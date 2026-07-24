@@ -17,7 +17,6 @@ type ReviewData = {
   attendanceDate: string;
   unitName: string;
   contactType: string;
-  waitTime: string;
   resolution: string;
   scores: { label: string; value: string }[];
   professionalScores: { name: string; position: string; score: string }[];
@@ -34,13 +33,10 @@ type EvaluationFormState = {
   new_patient_neighborhood: string;
   attendance_date: string;
   contact_type: string;
-  wait_time_minutes: string;
   resolution: string;
   general_score: string;
-  satisfaction_score: string;
   structure_score: string;
-  clarity_score: string;
-  service_quality_score: string;
+  wait_time_score: string;
   manifestation: string;
   general_notes: string;
   professionalScores: Record<string, string>;
@@ -51,10 +47,8 @@ const fieldClass = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2
 const smallFieldClass = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-blue-600';
 const generalScoreFields = [
   ['general_score', 'Nota geral'],
-  ['satisfaction_score', 'Satisfação'],
   ['structure_score', 'Estrutura'],
-  ['clarity_score', 'Clareza'],
-  ['service_quality_score', 'Qualidade'],
+  ['wait_time_score', 'Tempo de espera'],
 ] as const;
 const initialFormState: EvaluationFormState = {
   new_patient_full_name: '',
@@ -65,13 +59,10 @@ const initialFormState: EvaluationFormState = {
   new_patient_neighborhood: '',
   attendance_date: '',
   contact_type: 'phone',
-  wait_time_minutes: '',
   resolution: 'resolved',
   general_score: '',
-  satisfaction_score: '',
   structure_score: '',
-  clarity_score: '',
-  service_quality_score: '',
+  wait_time_score: '',
   manifestation: 'neutral',
   general_notes: '',
   professionalScores: {},
@@ -98,10 +89,8 @@ const manifestationLabels: Record<string, string> = {
 
 const scoreFieldLabels: Record<string, string> = {
   general_score: 'Nota geral',
-  satisfaction_score: 'Satisfação',
   structure_score: 'Estrutura',
-  clarity_score: 'Clareza',
-  service_quality_score: 'Qualidade',
+  wait_time_score: 'Tempo de espera',
 };
 
 export function EvaluationForm({ patients, units, professionals, action }: Props) {
@@ -246,7 +235,6 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
       attendanceDate: String(formData.get('attendance_date') || '-'),
       unitName,
       contactType: contactTypeLabels[String(formData.get('contact_type') || '')] || '-',
-      waitTime: String(formData.get('wait_time_minutes') || '').trim() || 'Não informado',
       resolution: resolutionLabels[String(formData.get('resolution') || '')] || '-',
       scores,
       professionalScores,
@@ -513,20 +501,6 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-slate-700">Tempo de espera</span>
-          <input
-            name="wait_time_minutes"
-            type="number"
-            min="0"
-            max="1440"
-            value={formState.wait_time_minutes}
-            onChange={(event) => updateField('wait_time_minutes', event.target.value)}
-            placeholder="Minutos"
-            className={fieldClass}
-          />
-        </label>
-
-        <label className="block">
           <span className="mb-1 block text-sm font-semibold text-slate-700">Resolução</span>
           <select
             name="resolution"
@@ -544,8 +518,8 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h2 className="mb-4 text-base font-semibold text-slate-900">Notas gerais do atendimento</h2>
-        {/* Cinco campos empilhados um a um viravam uma coluna longa demais no celular. */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4">
+        {/* Três notas de 0 a 10: Nota geral, Estrutura e Tempo de espera. */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
           {generalScoreFields.map(([name, label]) => (
             <label key={name} className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">{label}</span>
@@ -669,7 +643,6 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
                 <ReviewItem label="Unidade" value={reviewData.unitName} />
                 <ReviewItem label="Data" value={reviewData.attendanceDate} />
                 <ReviewItem label="Contato" value={reviewData.contactType} />
-                <ReviewItem label="Espera" value={reviewData.waitTime === 'Não informado' ? reviewData.waitTime : `${reviewData.waitTime} min`} />
                 <ReviewItem label="Resolução" value={reviewData.resolution} />
                 <ReviewItem label="Manifestação" value={reviewData.manifestation} />
               </dl>

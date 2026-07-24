@@ -132,7 +132,7 @@ const fetchUnitMetrics = cache(async (cityId?: string): Promise<DashboardSection
     try {
       let query = supabase
         .from('v_unit_metrics')
-        .select('health_unit_id, health_unit_name, health_unit_type, health_unit_status, city_id, total_evaluations, avg_general_score, avg_satisfaction_score, avg_structure_score, avg_clarity_score, avg_service_quality_score, avg_wait_time_minutes, resolution_rate, last_evaluation_date')
+        .select('health_unit_id, health_unit_name, health_unit_type, health_unit_status, city_id, total_evaluations, avg_general_score, avg_structure_score, avg_wait_time_score, resolution_rate, last_evaluation_date')
         .eq('health_unit_status', 'active')
         .order('avg_general_score', { ascending: false, nullsFirst: false })
         .limit(200);

@@ -84,10 +84,10 @@ async function StatsSection({ cityId }: { cityId?: string }) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-      <StatCard label="Nota geral" value={formatNumber(weightedAverage(unitsWithEvaluations, 'avg_general_score'))} hint="Media municipal" />
-      <StatCard label="Satisfacao" value={formatNumber(weightedAverage(unitsWithEvaluations, 'avg_satisfaction_score'))} hint="Media dos usuarios" />
+      <StatCard label="IMS" value={formatNumber(weightedAverage(unitsWithEvaluations, 'avg_general_score'))} hint="Indice Municipal de Saude" />
+      <StatCard label="Estrutura" value={formatNumber(weightedAverage(unitsWithEvaluations, 'avg_structure_score'))} hint="Media municipal" />
+      <StatCard label="Tempo de espera" value={formatNumber(weightedAverage(unitsWithEvaluations, 'avg_wait_time_score'))} hint="Media municipal" />
       <StatCard label="Resolucao" value={`${formatNumber(weightedAverage(unitsWithEvaluations, 'resolution_rate'))}%`} hint="Atendimentos resolvidos" />
-      <StatCard label="Espera media" value={`${formatNumber(weightedAverage(unitsWithEvaluations, 'avg_wait_time_minutes'), 0)} min`} hint="Media informada" />
       <StatCard label="Avaliacoes" value={formatInteger(totalEvaluations)} hint="Total registrado" />
     </div>
   );
@@ -136,10 +136,10 @@ async function UnitTableSection({ cityId }: { cityId?: string }) {
             <div className="text-sm font-semibold text-slate-900">{unit.health_unit_name}</div>
             <div className="mt-0.5 text-xs text-slate-500">{labelUnitType(unit.health_unit_type)}</div>
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <UnitMetricItem label="Nota" value={formatNumber(unit.avg_general_score)} />
+              <UnitMetricItem label="IMS" value={formatNumber(unit.avg_general_score)} />
               <UnitMetricItem label="Avaliacoes" value={formatInteger(unit.total_evaluations)} />
               <UnitMetricItem label="Resolucao" value={`${formatNumber(unit.resolution_rate)}%`} />
-              <UnitMetricItem label="Espera" value={`${formatNumber(unit.avg_wait_time_minutes, 0)} min`} />
+              <UnitMetricItem label="Espera" value={formatNumber(unit.avg_wait_time_score)} />
             </dl>
           </li>
         ))}
@@ -152,7 +152,7 @@ async function UnitTableSection({ cityId }: { cityId?: string }) {
               <th className="px-3 py-3">Unidade</th>
               <th className="px-3 py-3">Tipo</th>
               <th className="px-3 py-3">Avaliacoes</th>
-              <th className="px-3 py-3">Nota</th>
+              <th className="px-3 py-3">IMS</th>
               <th className="px-3 py-3">Resolucao</th>
               <th className="px-3 py-3">Espera</th>
             </tr>
@@ -165,7 +165,7 @@ async function UnitTableSection({ cityId }: { cityId?: string }) {
                 <td className="px-3 py-3">{formatInteger(unit.total_evaluations)}</td>
                 <td className="px-3 py-3">{formatNumber(unit.avg_general_score)}</td>
                 <td className="px-3 py-3">{formatNumber(unit.resolution_rate)}%</td>
-                <td className="px-3 py-3">{formatNumber(unit.avg_wait_time_minutes, 0)} min</td>
+                <td className="px-3 py-3">{formatNumber(unit.avg_wait_time_score)}</td>
               </tr>
             ))}
           </tbody>
@@ -255,7 +255,7 @@ async function CityComparisonSection() {
                 <th className="px-3 py-3">Cidade</th>
                 <th className="px-3 py-3">Unidades</th>
                 <th className="px-3 py-3">Avaliacoes</th>
-                <th className="px-3 py-3">Nota</th>
+                <th className="px-3 py-3">IMS</th>
                 <th className="px-3 py-3">Resolucao</th>
               </tr>
             </thead>
@@ -308,7 +308,7 @@ export default async function PainelPage({ searchParams }: Props) {
       </Suspense>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <SectionCard title="Evolucao mensal da nota geral">
+        <SectionCard title="Evolucao mensal do IMS">
           <Suspense key={`monthly-${cityId ?? 'all'}`} fallback={<CardFallback className="h-72" />}>
             <MonthlyChartSection cityId={cityId} />
           </Suspense>

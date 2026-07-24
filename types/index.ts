@@ -57,12 +57,9 @@ export type UnitMetric = {
   city_id?: string | null;
   total_evaluations: number | string | null;
   avg_general_score: number | string | null;
-  avg_satisfaction_score: number | string | null;
   avg_structure_score?: number | string | null;
-  avg_clarity_score?: number | string | null;
-  avg_service_quality_score?: number | string | null;
+  avg_wait_time_score?: number | string | null;
   resolution_rate: number | string | null;
-  avg_wait_time_minutes: number | string | null;
   last_evaluation_date?: string | null;
 };
 

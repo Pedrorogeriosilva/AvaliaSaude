@@ -195,25 +195,19 @@ create table if not exists public.evaluations (
   health_unit_id uuid not null references public.health_units(id) on delete restrict,
   attendance_date date not null,
   contact_type public.contact_type not null,
-  wait_time_minutes integer,
   resolution public.resolution_status not null,
   general_score numeric(4,2) not null,
-  satisfaction_score numeric(4,2) not null,
   structure_score numeric(4,2) not null,
-  clarity_score numeric(4,2) not null,
-  service_quality_score numeric(4,2) not null,
+  wait_time_score numeric(4,2) not null,
   manifestation public.manifestation_type not null default 'neutral',
   general_notes text,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  constraint evaluations_wait_time_positive check (wait_time_minutes is null or wait_time_minutes >= 0),
   constraint evaluations_general_score_range check (general_score between 0 and 10),
-  constraint evaluations_satisfaction_score_range check (satisfaction_score between 0 and 10),
   constraint evaluations_structure_score_range check (structure_score between 0 and 10),
-  constraint evaluations_clarity_score_range check (clarity_score between 0 and 10),
-  constraint evaluations_service_quality_score_range check (service_quality_score between 0 and 10),
+  constraint evaluations_wait_time_score_range check (wait_time_score between 0 and 10),
   constraint evaluations_attendance_date_not_future check (attendance_date <= current_date)
 );
 
@@ -266,9 +260,8 @@ select
   date_trunc('month', attendance_date)::date as month,
   count(*)::integer as total_evaluations,
   round(avg(general_score), 2) as avg_general_score,
-  round(avg(satisfaction_score), 2) as avg_satisfaction_score,
-  round(avg(service_quality_score), 2) as avg_service_quality_score,
-  round(avg(wait_time_minutes), 2) as avg_wait_time_minutes,
+  round(avg(structure_score), 2) as avg_structure_score,
+  round(avg(wait_time_score), 2) as avg_wait_time_score,
   round(
     100.0 * count(*) filter (where resolution = 'resolved') / nullif(count(*), 0),
     2
@@ -288,11 +281,8 @@ select
   hu.status as health_unit_status,
   count(e.id)::integer as total_evaluations,
   round(avg(e.general_score), 2) as avg_general_score,
-  round(avg(e.satisfaction_score), 2) as avg_satisfaction_score,
   round(avg(e.structure_score), 2) as avg_structure_score,
-  round(avg(e.clarity_score), 2) as avg_clarity_score,
-  round(avg(e.service_quality_score), 2) as avg_service_quality_score,
-  round(avg(e.wait_time_minutes), 2) as avg_wait_time_minutes,
+  round(avg(e.wait_time_score), 2) as avg_wait_time_score,
   round(
     100.0 * count(e.id) filter (where e.resolution = 'resolved') / nullif(count(e.id), 0),
     2
@@ -312,9 +302,8 @@ select
   date_trunc('month', e.attendance_date)::date as month,
   count(e.id)::integer as total_evaluations,
   round(avg(e.general_score), 2) as avg_general_score,
-  round(avg(e.satisfaction_score), 2) as avg_satisfaction_score,
-  round(avg(e.service_quality_score), 2) as avg_service_quality_score,
-  round(avg(e.wait_time_minutes), 2) as avg_wait_time_minutes,
+  round(avg(e.structure_score), 2) as avg_structure_score,
+  round(avg(e.wait_time_score), 2) as avg_wait_time_score,
   round(
     100.0 * count(e.id) filter (where e.resolution = 'resolved') / nullif(count(e.id), 0),
     2
