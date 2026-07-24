@@ -258,12 +258,12 @@ create or replace view public.v_city_monthly_metrics
 with (security_invoker = true) as
 select
   date_trunc('month', attendance_date)::date as month,
-  count(*)::integer as total_evaluations,
+  count(id)::integer as total_evaluations,
   round(avg(general_score), 2) as avg_general_score,
   round(avg(structure_score), 2) as avg_structure_score,
   round(avg(wait_time_score), 2) as avg_wait_time_score,
   round(
-    100.0 * count(*) filter (where resolution = 'resolved') / nullif(count(*), 0),
+    100.0 * count(id) filter (where resolution = 'resolved') / nullif(count(id), 0),
     2
   ) as resolution_rate
 from public.evaluations

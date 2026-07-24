@@ -69,11 +69,11 @@ with (security_invoker = true) as
 select
   hu.city_id,
   date_trunc('month', e.attendance_date)::date as month,
-  count(*)::integer as total_evaluations,
+  count(e.id)::integer as total_evaluations,
   round(avg(e.general_score), 2) as avg_general_score,
   round(avg(e.structure_score), 2) as avg_structure_score,
   round(avg(e.wait_time_score), 2) as avg_wait_time_score,
-  round(100.0 * count(*) filter (where e.resolution = 'resolved') / nullif(count(*), 0), 2) as resolution_rate
+  round(100.0 * count(e.id) filter (where e.resolution = 'resolved') / nullif(count(e.id), 0), 2) as resolution_rate
 from public.evaluations e
 join public.patients p on p.id = e.patient_id and p.status = 'active'
 join public.health_units hu on hu.id = e.health_unit_id and hu.status = 'active'
