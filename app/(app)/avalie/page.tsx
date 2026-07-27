@@ -26,7 +26,7 @@ export default async function AvaliePage({ searchParams }: Props) {
       );
     }
 
-    const { patients, units, professionals, error } = await getEvaluationFormData();
+    const { patients, cities, units, professionals, error } = await getEvaluationFormData();
 
     if (error) {
       return <EmptyState title="Não foi possível carregar os dados." description={getFriendlySupabaseError(error, 'Não foi possível carregar os dados.')} />;
@@ -38,11 +38,11 @@ export default async function AvaliePage({ searchParams }: Props) {
         {params.success ? <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">Avaliação salva com sucesso.</div> : null}
         {params.error ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{getFriendlyErrorMessage(params.error)}</div> : null}
 
-        {!units.length ? (
+        {!units.length || !cities.length ? (
           <EmptyState title="Cadastros incompletos." />
         ) : (
           <SectionCard title="Nova avaliação">
-            <EvaluationForm patients={patients} units={units} professionals={professionals} action={createEvaluationAction} />
+            <EvaluationForm patients={patients} cities={cities} units={units} professionals={professionals} action={createEvaluationAction} />
           </SectionCard>
         )}
       </>

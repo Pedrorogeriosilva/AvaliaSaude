@@ -44,7 +44,8 @@ export type DashboardSectionResult<T> = {
 
 export type EvaluationFormData = {
   patients: Pick<Patient, 'id' | 'full_name' | 'cpf'>[];
-  units: Pick<HealthUnit, 'id' | 'name'>[];
+  cities: { id: string; name: string; state_uf: string }[];
+  units: Pick<HealthUnit, 'id' | 'name' | 'city_id'>[];
   professionals: Pick<Professional, 'id' | 'full_name' | 'position' | 'health_unit_id' | 'work_schedule'>[];
   error: QueryError;
 };
@@ -353,28 +354,35 @@ export const getDashboardNotesData = cache(async (cityId?: string): Promise<{ no
 
 export const getEvaluationFormData = cache(async (): Promise<EvaluationFormData> =>
   withReadClient('getEvaluationFormData', async (supabase) => {
-    const [patientsResult, unitsResult, professionalsResult] = await Promise.all([
+    const [patientsResult, unitsResult, professionalsResult, activeCities] = await Promise.all([
       supabase
         .from('patients')
         .select('id, full_name, cpf')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(12),
-      supabase.from('health_units').select('id, name').eq('status', 'active').order('name'),
+      supabase.from('health_units').select('id, name, city_id').eq('status', 'active').order('name'),
       supabase
         .from('professionals')
         .select('id, full_name, position, health_unit_id, work_schedule, health_units!inner(status)')
         .eq('status', 'active')
         .eq('health_units.status', 'active')
         .order('full_name'),
+      getActiveCities(),
     ]);
+
+    const units = (unitsResult.data || []) as EvaluationFormData['units'];
+    // Só entram no seletor as cidades que realmente têm unidade ativa visível
+    // para o usuário — o gestor acaba com uma única opção, o master com todas.
+    const cityIdsWithUnits = new Set(units.map((unit) => unit.city_id).filter(Boolean));
 
     return {
       patients: ((patientsResult.data || []) as EvaluationFormData['patients']).map((patient) => ({
         ...patient,
         cpf: maskCpf(patient.cpf),
       })),
-      units: (unitsResult.data || []) as EvaluationFormData['units'],
+      cities: activeCities.filter((city) => cityIdsWithUnits.has(city.id)),
+      units,
       professionals: ((professionalsResult.data || []) as ProfessionalFormRow[]).map(({ health_units, ...professional }) => professional),
       error: firstError([patientsResult, unitsResult, professionalsResult] as QueryResult<unknown>[]),
     };

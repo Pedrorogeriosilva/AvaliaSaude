@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HealthUnit, Patient, Professional } from '@/types';
 
 type PatientOption = Pick<Patient, 'id' | 'full_name' | 'cpf'>;
+type CityOption = { id: string; name: string; state_uf: string };
 
 type Props = {
   patients: PatientOption[];
-  units: Pick<HealthUnit, 'id' | 'name'>[];
+  cities: CityOption[];
+  units: Pick<HealthUnit, 'id' | 'name' | 'city_id'>[];
   professionals: Pick<Professional, 'id' | 'full_name' | 'position' | 'health_unit_id' | 'work_schedule'>[];
   action: (formData: FormData) => void | Promise<void>;
 };
@@ -15,6 +17,7 @@ type Props = {
 type ReviewData = {
   patientSummary: string;
   attendanceDate: string;
+  cityName: string;
   unitName: string;
   contactType: string;
   resolution: string;
@@ -93,7 +96,11 @@ const scoreFieldLabels: Record<string, string> = {
   wait_time_score: 'Tempo de espera',
 };
 
-export function EvaluationForm({ patients, units, professionals, action }: Props) {
+export function EvaluationForm({ patients, cities, units, professionals, action }: Props) {
+  // Com uma única cidade disponível (caso do gestor) já entra selecionada, e o
+  // campo vira apenas informativo — ninguém precisa escolher o óbvio.
+  const singleCityId = cities.length === 1 ? cities[0].id : '';
+  const [cityId, setCityId] = useState(singleCityId);
   const [unitId, setUnitId] = useState('');
   const [patientMode, setPatientMode] = useState<'new' | 'existing'>('new');
   const [patientSearch, setPatientSearch] = useState('');
@@ -106,6 +113,11 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
   const [formState, setFormState] = useState<EvaluationFormState>(initialFormState);
   const formRef = useRef<HTMLFormElement>(null);
   const bypassReviewRef = useRef(false);
+
+  const filteredUnits = useMemo(
+    () => (cityId ? units.filter((unit) => unit.city_id === cityId) : []),
+    [units, cityId],
+  );
 
   const filteredProfessionals = useMemo(
     () => professionals.filter((professional) => professional.health_unit_id === unitId),
@@ -212,7 +224,10 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
       return patient.cpf ? `${patient.full_name} · CPF ${patient.cpf}` : patient.full_name;
     })();
 
-    const unitName = units.find((unit) => unit.id === String(formData.get('health_unit_id') || ''))?.name || 'Unidade não identificada';
+    const selectedUnit = units.find((unit) => unit.id === String(formData.get('health_unit_id') || ''));
+    const unitName = selectedUnit?.name || 'Unidade não identificada';
+    const selectedCity = cities.find((city) => city.id === (selectedUnit?.city_id || cityId));
+    const cityName = selectedCity ? `${selectedCity.name} / ${selectedCity.state_uf}` : 'Cidade não identificada';
 
     const professionalScores = Array.from(formData.getAll('professional_ids'))
       .map((id) => String(id))
@@ -233,6 +248,7 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
     return {
       patientSummary,
       attendanceDate: String(formData.get('attendance_date') || '-'),
+      cityName,
       unitName,
       contactType: contactTypeLabels[String(formData.get('contact_type') || '')] || '-',
       resolution: resolutionLabels[String(formData.get('resolution') || '')] || '-',
@@ -284,9 +300,16 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
     resetReview();
   }
 
+  /** Trocar de cidade invalida a unidade e os profissionais já escolhidos. */
+  function handleCityChange(nextCityId: string) {
+    setCityId(nextCityId);
+    handleUnitChange('');
+  }
+
   function resetForm() {
     setSelectedProfessionals([]);
     setUnitId('');
+    setCityId(singleCityId);
     setPatientMode('new');
     setFormState(initialFormState);
     resetExistingPatientState();
@@ -457,19 +480,39 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <label className="block lg:col-span-2">
+          <span className="mb-1 block text-sm font-semibold text-slate-700">Cidade</span>
+          <select
+            required
+            value={cityId}
+            onChange={(event) => handleCityChange(event.target.value)}
+            disabled={cities.length <= 1}
+            className={`${fieldClass} disabled:bg-slate-100 disabled:text-slate-600`}
+          >
+            <option value="">Selecione a cidade</option>
+            {cities.map((city) => (
+              <option key={city.id} value={city.id}>{city.name} / {city.state_uf}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block lg:col-span-2">
           <span className="mb-1 block text-sm font-semibold text-slate-700">Unidade / PSF</span>
           <select
             name="health_unit_id"
             required
             value={unitId}
             onChange={(event) => handleUnitChange(event.target.value)}
-            className={fieldClass}
+            disabled={!cityId}
+            className={`${fieldClass} disabled:bg-slate-100 disabled:text-slate-600`}
           >
-            <option value="">Selecione</option>
-            {units.map((unit) => (
+            <option value="">{cityId ? 'Selecione a unidade' : 'Selecione a cidade primeiro'}</option>
+            {filteredUnits.map((unit) => (
               <option key={unit.id} value={unit.id}>{unit.name}</option>
             ))}
           </select>
+          {cityId && !filteredUnits.length ? (
+            <span className="mt-1 block text-xs text-slate-500">Nenhuma unidade ativa nesta cidade.</span>
+          ) : null}
         </label>
 
         <label className="block">
@@ -640,6 +683,7 @@ export function EvaluationForm({ patients, units, professionals, action }: Props
               <h3 className="text-sm font-semibold text-slate-900">Resumo do atendimento</h3>
               <dl className="mt-3 space-y-3 text-sm">
                 <ReviewItem label="Paciente" value={reviewData.patientSummary} />
+                <ReviewItem label="Cidade" value={reviewData.cityName} />
                 <ReviewItem label="Unidade" value={reviewData.unitName} />
                 <ReviewItem label="Data" value={reviewData.attendanceDate} />
                 <ReviewItem label="Contato" value={reviewData.contactType} />
